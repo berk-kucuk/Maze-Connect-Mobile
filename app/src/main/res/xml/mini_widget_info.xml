@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2x1: the smallest size — hostname and two meters.
+     See dashboard_widget_info.xml for why the update period is zero. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="58dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:configure="com.mazeconnect.app.widget.DashboardWidgetConfigureActivity"
+    android:initialLayout="@layout/widget_mini"
+    android:previewLayout="@layout/widget_mini"
+    android:description="@string/widget_mini_description"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen" />

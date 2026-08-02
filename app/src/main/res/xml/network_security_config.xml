@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- No cleartext, no exceptions — unlike haze-mobile's loopback
+         exception for its own local HTTP bridge, Maze Connect has no such
+         bridge; every connection is mTLS 1.3 to a paired peer. -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

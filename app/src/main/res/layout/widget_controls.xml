@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Killswitches, on the home screen.
+
+  This is the widget that does something rather than reporting something: each
+  cell is a button that toggles one device on the paired computer. That is the
+  point of the app on a home screen — the metrics widget is a readout, this is
+  a control.
+
+  A cell shows the device name and its state as words, never colour alone: the
+  palette has no accent, and "blocked" is the *good* state here, which is the
+  opposite of most indicators and needs saying rather than implying.
+
+  One cell high. It was 4x2, which gave four short buttons a quarter of a
+  screen and a great deal of empty space between them — the mark, the name and
+  the state fit on one row, so that is what it takes.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/widget_host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#F2F1EC"
+            android:textSize="11sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="@string/widget_no_computer" />
+        <TextView
+            android:id="@+id/widget_age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#7A7A7F"
+            android:textSize="10sp"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/control_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout android:id="@+id/control_1"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:layout_marginEnd="4dp"
+            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:background="@drawable/widget_cell">
+            <ImageView android:id="@+id/control_icon_1"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_camera"
+                android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_1"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/control_state_1"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/control_2"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:layout_marginEnd="4dp"
+            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:background="@drawable/widget_cell">
+            <ImageView android:id="@+id/control_icon_2"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_microphone"
+                android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_2"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/control_state_2"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/control_3"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:layout_marginEnd="4dp"
+            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:background="@drawable/widget_cell">
+            <ImageView android:id="@+id/control_icon_3"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_wifi"
+                android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_3"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/control_state_3"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/control_4"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:background="@drawable/widget_cell">
+            <ImageView android:id="@+id/control_icon_4"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_bluetooth"
+                android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_4"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+            <TextView android:id="@+id/control_state_4"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="#7A7A7F"
+        android:textSize="10sp"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,39 @@
+<resources>
+    <string name="app_name">Maze Connect</string>
+
+    <string name="link_channel_name">Device link</string>
+    <string name="link_channel_description">Shown while Maze Connect is keeping a link to a paired device.</string>
+    <string name="link_notification_title">Maze Connect is running</string>
+    <string name="link_notification_text">Keeping a link to your paired devices.</string>
+    <string name="open_on_phone_channel_name">Sent from your computer</string>
+    <string name="open_on_phone_channel_description">A link or text your computer sent to open here.</string>
+    <string name="open_on_phone_notification_title">From your computer</string>
+    <string name="open_on_phone_notification_text">Tap to copy to your clipboard.</string>
+    <string name="open_on_phone_copied">Copied from your computer.</string>
+    <string name="widget_description">The detailed dashboard: hostname, four meters, and hardening/services/network as numbers.</string>
+    <string name="widget_no_computer">No reading yet</string>
+    <string name="widget_computer">Computer</string>
+    <string name="widget_open_to_connect">Open Maze Connect and pair to see your computer here.</string>
+    <string name="widget_age_now">just now</string>
+    <string name="widget_age_minutes">%1$d min ago</string>
+    <string name="widget_age_hours">%1$d h ago</string>
+    <string name="widget_age_old">over a day ago</string>
+    <string name="widget_mini_description">The smallest size: hostname and two meters.</string>
+    <string name="widget_compact_description">A small glance at your computer: hostname and three meters, in one row.</string>
+    <string name="widget_stat_hardening">Hardening</string>
+    <string name="widget_stat_services">Services</string>
+    <string name="widget_stat_network">Network</string>
+    <string name="widget_controls_description">Killswitches on the home screen: tap to block or allow the camera, microphone, Wi-Fi or Bluetooth.</string>
+    <string name="widget_blocked">blocked</string>
+    <string name="widget_allowed">allowed</string>
+    <string name="widget_absent">absent</string>
+    <string name="widget_unknown">unknown</string>
+    <string name="widget_commands_description">Favourite commands on the home screen: tap to run one your computer marked as pinned.</string>
+    <string name="widget_commands_none_pinned">Nothing pinned yet. On your computer\'s Commands page, mark an entry to show it here.</string>
+    <string name="commands_widget_gone">That command is no longer on the computer\'s list.</string>
+    <string name="commands_widget_still_running">Still running — open the app to see the result.</string>
+    <string name="guard_widget_no_service">Maze Connect could not start. Open the app once, then try again.</string>
+    <string name="guard_widget_unreachable">No paired computer answered. Check that it is on the same network and Maze Connect is running there.</string>
+    <string name="guard_widget_refused">Your computer refused the request.</string>
+    <string name="guard_no_computer">No paired computer is reachable right now.</string>
+</resources>

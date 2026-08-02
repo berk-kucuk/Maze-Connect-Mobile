@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-Android-12 counterpart to data_extraction_rules.xml — moot in
+     practice since android:allowBackup="false" already disables the legacy
+     backup path entirely, but kept explicit for defense in depth. -->
+<full-backup-content>
+    <exclude domain="root" />
+</full-backup-content>

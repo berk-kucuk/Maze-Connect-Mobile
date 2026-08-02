@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The home-screen dashboard.
+
+  RemoteViews, so this is a fixed layout rather than Compose: a widget is
+  rendered by the launcher's process, and only the handful of view types
+  RemoteViews supports are available.
+
+  The four meter rows are written out in full, with distinct ids, rather than
+  four `<include>`s of one row layout. RemoteViews addresses views by id
+  across the whole tree and has no per-include scoping, so repeated includes
+  would all answer to `meter_label`/`meter_bar` — `setTextViewText(R.id.meter_label, …)`
+  reaching only the first, and the widget showing one bar with the rest blank.
+  The repetition below is the fix, not an oversight.
+
+  Everything reads as text as well as by bar length. A widget is glanced at
+  rather than studied, and a bar with no number beside it says almost nothing.
+
+  The three stat cells at the bottom used to be one folded summary line
+  ("Hardening 72% · 4/5 services"). A sentence that dense is exactly the
+  kind of thing a glance skips past; three short numbers in their own boxes
+  are not.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#F2F1EC"
+            android:textSize="14sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="@string/widget_no_computer" />
+
+        <TextView
+            android:id="@+id/widget_age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#7A7A7F"
+            android:textSize="10sp"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_meters"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/meter_row_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="6dp"
+            android:gravity="center_vertical">
+            <TextView android:id="@+id/meter_label_1"
+                android:layout_width="56dp" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+            <ProgressBar android:id="@+id/meter_bar_1"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:max="100"
+                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <TextView android:id="@+id/meter_value_1"
+                android:layout_width="40dp" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:gravity="end" android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/meter_row_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="6dp"
+            android:gravity="center_vertical">
+            <TextView android:id="@+id/meter_label_2"
+                android:layout_width="56dp" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+            <ProgressBar android:id="@+id/meter_bar_2"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:max="100"
+                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <TextView android:id="@+id/meter_value_2"
+                android:layout_width="40dp" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:gravity="end" android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/meter_row_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="6dp"
+            android:gravity="center_vertical">
+            <TextView android:id="@+id/meter_label_3"
+                android:layout_width="56dp" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+            <ProgressBar android:id="@+id/meter_bar_3"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:max="100"
+                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <TextView android:id="@+id/meter_value_3"
+                android:layout_width="40dp" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:gravity="end" android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/meter_row_4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <TextView android:id="@+id/meter_label_4"
+                android:layout_width="56dp" android:layout_height="wrap_content"
+                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+            <ProgressBar android:id="@+id/meter_bar_4"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:max="100"
+                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <TextView android:id="@+id/meter_value_4"
+                android:layout_width="40dp" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:gravity="end" android:maxLines="1" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Hardening score, security services and network — as three numbers,
+         never names. A home screen is not the place to publish which
+         protections, or which specific weaknesses, a machine has. -->
+    <LinearLayout
+        android:id="@+id/widget_stats"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="6dp"
+            android:orientation="vertical" android:gravity="center_horizontal"
+            android:background="@drawable/widget_cell"
+            android:paddingVertical="6dp">
+            <TextView android:id="@+id/stat_hardening_value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#F2F1EC" android:textSize="13sp" android:maxLines="1" />
+            <TextView
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:textColor="#7A7A7F" android:textSize="8sp" android:maxLines="1"
+                android:text="@string/widget_stat_hardening" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="6dp"
+            android:orientation="vertical" android:gravity="center_horizontal"
+            android:background="@drawable/widget_cell"
+            android:paddingVertical="6dp">
+            <TextView android:id="@+id/stat_services_value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#F2F1EC" android:textSize="13sp" android:maxLines="1" />
+            <TextView
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:textColor="#7A7A7F" android:textSize="8sp" android:maxLines="1"
+                android:text="@string/widget_stat_services" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical" android:gravity="center_horizontal"
+            android:background="@drawable/widget_cell"
+            android:paddingVertical="6dp">
+            <TextView android:id="@+id/stat_network_value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#F2F1EC" android:textSize="13sp" android:maxLines="1" />
+            <TextView
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:textColor="#7A7A7F" android:textSize="8sp" android:maxLines="1"
+                android:text="@string/widget_stat_network" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="#7A7A7F"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>

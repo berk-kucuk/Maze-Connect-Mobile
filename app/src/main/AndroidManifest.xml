@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Minimal permission set for this scaffolding pass. LAN discovery +
+         pairing (ACCESS_WIFI_STATE/ACCESS_NETWORK_STATE) and the persistent
+         link's foreground service are the only always-needed permissions.
+         BIND_NOTIFICATION_LISTENER_SERVICE is added only once notification
+         mirroring ships, granted separately via a Settings deep link, not
+         requested here. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Discovery is multicast, and Android filters multicast out before it
+         reaches an app unless the app holds a lock. Without this permission
+         the computer's announcements are simply never seen. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Keeps the Wi-Fi radio from being parked while the screen is off, which
+         is when a home-screen widget most needs the link to still be up. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MazeConnect">
+
+        <!--
+          Hands a single received file to another app on request. Not
+          exported: only this app can hand out a URI, and each one grants
+          read access to one file for as long as the receiver needs it.
+        -->
+        <!--
+          The home-screen dashboard. Exported because the launcher hosts it;
+          it reads only the small file the app writes for it and holds no
+          other capability.
+        -->
+        <receiver
+            android:name=".widget.DashboardWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dashboard_widget_info" />
+        </receiver>
+
+        <!-- Shown once when a Dashboard/Compact/Mini widget is placed: pick
+             which paired computer this instance draws. Exported because the
+             widget-placement flow (the launcher, on the system's behalf)
+             is what starts it. -->
+        <activity
+            android:name=".widget.DashboardWidgetConfigureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".widget.DashboardWidget$Compact"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/compact_widget_info" />
+        </receiver>
+
+        <!-- The 2x1 mini glance: hostname and freshness, nothing else. -->
+        <receiver
+            android:name=".widget.DashboardWidget$Mini"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/mini_widget_info" />
+        </receiver>
+
+        <!-- Favourite commands, pinned only from the computer. Exported
+             because the launcher hosts it; a tap opens CommandRunActivity
+             rather than acting here — see that activity for why. -->
+        <receiver
+            android:name=".widget.CommandsWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/commands_widget_info" />
+        </receiver>
+
+        <!-- The confirmation (and result) a Commands-widget tap goes
+             through. Not exported: only this app's own widget starts it. -->
+        <activity
+            android:name=".widget.CommandRunActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect.Transparent" />
+
+        <!-- Shown once when a Commands widget is placed: pick which paired
+             computer's pinned commands this instance runs. -->
+        <activity
+            android:name=".widget.CommandsWidgetConfigureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- The one widget that acts rather than reports. Exported because
+             the launcher hosts it; a tap carries a device name from a fixed
+             list and nothing else. -->
+        <receiver
+            android:name=".widget.ControlsWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/controls_widget_info" />
+        </receiver>
+
+        <!-- The confirmation a home-screen killswitch press goes through.
+             Not exported: only this app's own widget starts it. -->
+        <activity
+            android:name=".widget.GuardConfirmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect.Transparent" />
+
+        <!-- Shown once when a Controls widget is placed: pick which paired
+             computer's killswitches this instance controls. -->
+        <activity
+            android:name=".widget.ControlsWidgetConfigureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- The Android share-sheet target. Exported because any app's
+             Share action reaches it; it reads only the file(s) the sending
+             app already granted this intent access to, and offers them to
+             whichever paired computer is reachable — the same trust
+             boundary as every other transfer. -->
+        <activity
+            android:name=".share.ShareReceiverActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!--
+          adjustResize, stated rather than inherited: the layout applies the
+          system-bar insets itself and leaves the keyboard to the window. With
+          the mode left to the platform's discretion the two disagreed, and the
+          chat content moved up by twice the keyboard's height.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.MazeConnect">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.MazeConnectService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- The non-URL half of "open on phone": copies text to the
+             clipboard when the notification is tapped. Not exported — only
+             MazeConnectService's own PendingIntent ever reaches it. -->
+        <receiver
+            android:name=".service.OpenOnPhoneReceiver"
+            android:exported="false" />
+
+    </application>
+
+</manifest>

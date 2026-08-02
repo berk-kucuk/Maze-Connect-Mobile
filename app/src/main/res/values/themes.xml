@@ -1,0 +1,18 @@
+<resources>
+    <!-- Dark-only, matching the Maze Linux brand's `color-scheme: dark`
+         (see MazeLinuxWeb/src/index.css) — there is no light variant. -->
+    <style name="Theme.MazeConnect" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/maze_void</item>
+        <item name="android:statusBarColor">@color/maze_void</item>
+        <item name="android:navigationBarColor">@color/maze_void</item>
+    </style>
+
+    <!-- The killswitch confirmation floats over whatever is behind it: it is
+         a question, not a screen. -->
+    <style name="Theme.MazeConnect.Transparent" parent="Theme.MazeConnect">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+</resources>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  updatePeriodMillis is 0 on purpose.
+
+  The system's own period has a 30-minute floor and wakes the device to honour
+  it. This widget has nothing to fetch on a schedule — it draws whatever the
+  app last saw — so it is redrawn when a snapshot arrives instead, and costs
+  nothing in between.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="160dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:configure="com.mazeconnect.app.widget.DashboardWidgetConfigureActivity"
+    android:initialLayout="@layout/widget_dashboard"
+    android:previewLayout="@layout/widget_dashboard"
+    android:description="@string/widget_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

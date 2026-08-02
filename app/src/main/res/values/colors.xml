@@ -1,0 +1,7 @@
+<resources>
+    <!-- Maze Linux brand token (see MazeLinuxWeb/tailwind.config.ts). The
+         Compose theme (ui/theme/Color.kt) is the source of truth for the app
+         UI; this XML copy exists only so the manifest-declared theme can set
+         windowBackground before Compose has rendered its first frame. -->
+    <color name="maze_void">#000000</color>
+</resources>

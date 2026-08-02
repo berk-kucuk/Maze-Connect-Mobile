@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exactly the inbox, and nothing else.
+
+  A FileProvider grants access to whatever these paths cover, so the scope is
+  the security boundary: naming a parent directory here would let any app the
+  user shares to reach files this one never received.
+-->
+<paths>
+    <external-files-path name="inbox" path="Download/inbox/" />
+</paths>

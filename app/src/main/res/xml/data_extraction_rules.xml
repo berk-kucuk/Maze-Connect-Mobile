@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android:allowBackup="false" already blocks the legacy backup path, but
+     Android 12+ evaluates cloud-backup and device-transfer separately from
+     that flag. Deny both explicitly rather than leave it to the default —
+     paired-device fingerprints and key material must never leave the
+     device. -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapability="false">
+        <exclude domain="root" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+    </device-transfer>
+</data-extraction-rules>

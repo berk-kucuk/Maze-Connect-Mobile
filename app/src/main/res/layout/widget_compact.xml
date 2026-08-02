@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The 4x1 variant: the same three readings as the 4x2, laid out across rather
+  than down.
+
+  A separate layout, not the full one squeezed. At one cell high there is no
+  room to stack three labelled rows and keep the hostname legible, so the
+  meters become three narrow columns — label and value on one line, bar under
+  it — which is the arrangement that keeps all three readable at this height.
+
+  The ids are deliberately the same as the 4x2 layout's (meter_label_N,
+  meter_bar_N, meter_value_N, meter_row_N). RemoteViews addresses views by id,
+  so one render() fills either layout with no branching: the difference
+  between the two widgets is this file, not the code.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#F2F1EC"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="@string/widget_no_computer" />
+
+        <TextView
+            android:id="@+id/widget_age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#7A7A7F"
+            android:textSize="9sp"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout android:id="@+id/meter_row_1"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:layout_marginEnd="10dp">
+            <LinearLayout
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/meter_label_1"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                <TextView android:id="@+id/meter_value_1"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:textColor="#F2F1EC" android:textSize="9sp"
+                    android:gravity="end" android:maxLines="1" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/meter_bar_1"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_marginTop="3dp"
+                android:max="100"
+                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/meter_row_2"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:layout_marginEnd="10dp">
+            <LinearLayout
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/meter_label_2"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                <TextView android:id="@+id/meter_value_2"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:textColor="#F2F1EC" android:textSize="9sp"
+                    android:gravity="end" android:maxLines="1" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/meter_bar_2"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_marginTop="3dp"
+                android:max="100"
+                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/meter_row_3"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/meter_label_3"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                <TextView android:id="@+id/meter_value_3"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:textColor="#F2F1EC" android:textSize="9sp"
+                    android:gravity="end" android:maxLines="1" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/meter_bar_3"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_marginTop="3dp"
+                android:max="100"
+                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="#7A7A7F"
+        android:textSize="10sp"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 4x1 of buttons, same footprint as the Controls widget. Update period
+     zero for the same reason as the others: redrawn when the catalog
+     changes, not on a timer that wakes the device. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:configure="com.mazeconnect.app.widget.CommandsWidgetConfigureActivity"
+    android:initialLayout="@layout/widget_commands"
+    android:previewLayout="@layout/widget_commands"
+    android:description="@string/widget_commands_description"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen" />
