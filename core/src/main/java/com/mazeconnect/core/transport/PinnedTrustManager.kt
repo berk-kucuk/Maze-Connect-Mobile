@@ -34,6 +34,30 @@ class PinnedTrustManager(
     var peerWasTrusted: Boolean = false
         private set
 
+    /**
+     * Populate from a handshake this instance did not take part in.
+     *
+     * An `SSLServerSocket` is built from one `SSLContext` and every socket it
+     * accepts handshakes through *that* context's trust manager. A per-
+     * connection manager created beside the accept loop therefore never sees
+     * a certificate, and its [peerPublicKey] stays null forever — which is
+     * not a degraded link but no link at all, since Connection refuses to
+     * start without a peer key.
+     *
+     * So the accept path hands the completed session's chain here instead.
+     * The chain comes from `SSLSession.getPeerCertificates()`, which the
+     * platform only populates once the peer has actually proved possession
+     * of that key, and it is then run through exactly the same [check] as a
+     * live handshake: same EC-only rule, same plausibility test, same
+     * pinning decision. Nothing is trusted here that would not have been
+     * trusted there.
+     *
+     * @return false if the chain is unusable or, for a paired-mode manager,
+     *         not pinned — the caller must drop the connection.
+     */
+    fun adoptCompletedHandshake(chain: Array<out X509Certificate>?): Boolean =
+        runCatching { check(chain) }.isSuccess
+
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =
         check(chain)
 

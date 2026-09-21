@@ -15,7 +15,10 @@ import com.mazeconnect.core.crypto.Fingerprint
 import com.mazeconnect.core.protocol.Capability
 import com.mazeconnect.core.discovery.DiscoveredDevice
 import com.mazeconnect.app.service.Link
+import com.mazeconnect.app.service.LiveStatusNotification
 import com.mazeconnect.app.service.MazeConnectService
+import com.mazeconnect.app.update.UpdateChecker
+import com.mazeconnect.app.update.UpdateStatus
 import com.mazeconnect.app.widget.CommandsWidget
 import com.mazeconnect.app.widget.ControlsWidget
 import com.mazeconnect.app.widget.DashboardWidget
@@ -123,6 +126,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             manager.events.collect { event -> _status.value = event.describe() }
         }
         followSnapshotsForWidget()
+        checkForUpdateIfDue()
     }
 
     /**
@@ -355,7 +359,92 @@ class AppState(application: Application) : AndroidViewModel(application) {
         manager.forceReconnect(deviceId)
     }
 
+    /** Re-run discovery. For the empty list, where there is nothing to
+     *  press "reconnect" on. */
+    fun rescan() {
+        manager.rescan()
+    }
+
+    /**
+     * The dashboard's Refresh button.
+     *
+     * Falls through to a rescan when the reading cannot be asked for, and
+     * that fallback is the whole point. The dashboard already polls every
+     * few seconds *while a computer is connected*, so the only time a person
+     * reaches for Refresh is when it has gone stale — which is exactly when
+     * there is no link to ask over and a plain status request would do
+     * nothing at all. requestStatus() returns false in precisely those
+     * cases (no link, or the capability switched off), so its answer is the
+     * signal for what to do instead.
+     */
+    fun refreshDashboard() {
+        val id = selectedDeviceId.value
+        if (id == null || !manager.requestStatus(id)) manager.rescan()
+    }
+
     fun displayFingerprint(hex: String): String = Fingerprint.display(hex)
+
+    // ---- Now bar / live status -------------------------------------------
+
+    val liveStatusSupported: Boolean get() = LiveStatusNotification.isSupported()
+
+    /** What the system did with the last post — see PromotionState. */
+    fun liveStatusPromotion(): LiveStatusNotification.PromotionState =
+        LiveStatusNotification.promotionState(getApplication())
+
+    var liveStatusEnabled: Boolean
+        get() = LiveStatusNotification.isEnabled(getApplication())
+        set(value) {
+            LiveStatusNotification.setEnabled(getApplication(), value)
+            // Applied now rather than at the next reading. The background
+            // sweep is on a minute-long timer, and a switch that appears to
+            // do nothing for most of a minute reads as a broken switch —
+            // which is the exact complaint this whole screen keeps producing.
+            if (value) {
+                LiveStatusNotification.refresh(
+                    getApplication(),
+                    manager.systemStatus.value,
+                    force = true,
+                ) { deviceId ->
+                    manager.pairedDevices.value
+                        .firstOrNull { it.deviceId == deviceId }?.deviceName
+                }
+            }
+        }
+
+    // ---- Update reminder -------------------------------------------------
+
+    private val _update = MutableStateFlow(UpdateStatus())
+    val update: StateFlow<UpdateStatus> = _update.asStateFlow()
+
+    val installedVersionCode: Long get() = UpdateChecker.installedVersionCode(getApplication())
+    val installedVersionName: String get() = UpdateChecker.installedVersionName(getApplication())
+
+    var updateCheckEnabled: Boolean
+        get() = UpdateChecker.isEnabled(getApplication())
+        set(value) {
+            UpdateChecker.setEnabled(getApplication(), value)
+            if (!value) _update.value = UpdateStatus()
+        }
+
+    /** The automatic look, at most daily. Silent about every outcome except
+     *  a genuinely newer build — an unreachable LAN server is the normal
+     *  case away from home, not something to report. */
+    private fun checkForUpdateIfDue() {
+        viewModelScope.launch {
+            UpdateChecker.checkIfDue(getApplication())?.let { _update.value = it }
+        }
+    }
+
+    /** The Settings button. Reports every outcome, including failure: here
+     *  the user is looking at the result and silence would read as a hang. */
+    fun checkForUpdateNow() {
+        if (_update.value.checking) return
+        _update.value = _update.value.copy(checking = true, error = null)
+        viewModelScope.launch {
+            _update.value = UpdateChecker.checkNow(getApplication())
+        }
+    }
 
     override fun onCleared() {
         // Nothing is torn down here, and that is the point. This runs when the
@@ -378,6 +467,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         // status line is not the place for clipboard content, and the
         // notification MazeConnectService posts is where it's actually read.
         is DeviceEvent.OpenOnPhone -> "Your computer sent you something to open."
+        // The dialog this event also raises is the real surface; the status
+        // line just explains why it appeared.
+        is DeviceEvent.PairingRequested -> "$deviceName wants to pair."
     }
 
     private fun PairedDevice.toRow(connected: Boolean) = DeviceRow(

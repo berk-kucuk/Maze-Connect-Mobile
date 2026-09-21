@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  updatePeriodMillis is 0 on purpose: the system's own period has a 30-minute
+  floor and wakes the device to honour it. This widget has nothing to fetch on
+  a schedule — it draws whatever the app last saw — so it is redrawn when a
+  snapshot arrives instead, and costs nothing in between.
+
+  minHeight is the smallest this widget may be, NOT how tall its content is.
+  The launcher divides it by the cell height and rounds up, so raising it to
+  the measured content height — which reads like the careful thing to do —
+  pushed this provider from two rows of cells to three and made the widget
+  half again as tall as it needed to be. The content is free to be taller
+  than this: the cells actually allocated are.
+
+  minResizeWidth/Height are stated rather than left to default. Without them
+  the smallest a widget can be dragged is its minWidth/minHeight, so there is
+  no way to take back space the launcher granted.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="168dp"
+    android:minResizeWidth="200dp"
+    android:minResizeHeight="150dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:configure="com.mazeconnect.app.widget.DashboardWidgetConfigureActivity"
+    android:initialLayout="@layout/widget_detailed"
+    android:previewLayout="@layout/widget_detailed"
+    android:description="@string/widget_detailed_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

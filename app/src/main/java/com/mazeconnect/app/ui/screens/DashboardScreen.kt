@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mazeconnect.app.data.DeviceRow
 import com.mazeconnect.app.ui.components.Hairline
+import com.mazeconnect.app.ui.components.MazeButton
 import com.mazeconnect.app.ui.components.MazeLabel
 import com.mazeconnect.app.ui.components.MazeMeter
 import com.mazeconnect.app.ui.components.TriStateGlyph
@@ -53,6 +54,7 @@ fun DashboardScreen(
     selectedDeviceId: String?,
     state: SystemStatusState?,
     onRefresh: (String) -> Unit,
+    onManualRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalMazeColors.current
@@ -83,6 +85,11 @@ fun DashboardScreen(
             Hairline(Modifier.weight(1f).height(1.dp))
             Spacer(Modifier.width(12.dp))
             MazeLabel(target?.name ?: "no computer")
+            Spacer(Modifier.width(12.dp))
+            // The automatic poll only runs while a computer is connected, so
+            // a stale panel is by definition one the poll is not touching.
+            // This asks again, and asks for the link back when there is none.
+            MazeButton(text = "Refresh", onClick = onManualRefresh, primary = false)
         }
 
         // Filtered to the computer actually on screen. The flow holds one

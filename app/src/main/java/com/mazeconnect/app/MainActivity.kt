@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -55,12 +56,46 @@ import com.mazeconnect.app.ui.screens.FileOfferDialog
 import com.mazeconnect.app.ui.theme.LocalMazeColors
 import com.mazeconnect.app.ui.theme.MazeColors
 import com.mazeconnect.app.ui.theme.MazeConnectTheme
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Asking is not optional on Android 13 and later.
+     *
+     * POST_NOTIFICATIONS has been declared in the manifest all along, but a
+     * manifest entry alone grants nothing from API 33: until the user is
+     * actually asked, *every* notification this app posts is dropped
+     * silently. That covered the foreground-service notification — the one
+     * disclosure that the app is holding a link — and it would have covered
+     * the pairing request too, which is the one notification the user must
+     * see for the computer's Pair button to lead anywhere while the app is
+     * backgrounded.
+     *
+     * Nothing is gated on the answer. A refusal costs the user the
+     * notifications and nothing else; the link, the widgets and the pairing
+     * dialog all work exactly as before, so there is no reason to ask twice
+     * or to explain first.
+     */
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestNotificationPermissionIfNeeded()
 
         // Tapping a widget configured for a particular computer should open
         // straight onto that computer's data, not whichever one the
@@ -93,6 +128,11 @@ private fun MazeConnectApp(state: AppState) {
     val devices by state.devices.collectAsState()
     val selectedDeviceId by state.selectedDeviceId.collectAsState()
     val pairing by state.pendingPairing.collectAsState()
+    val update by state.update.collectAsState()
+    // Mirrored into composition state because the preference itself is a
+    // plain SharedPreferences read, which recomposition cannot observe.
+    var updateCheckEnabled by remember { mutableStateOf(state.updateCheckEnabled) }
+    var liveStatusEnabled by remember { mutableStateOf(state.liveStatusEnabled) }
     val status by state.status.collectAsState()
     val fingerprint by state.fingerprint.collectAsState()
     val systemStatus by state.systemStatus.collectAsState()
@@ -162,12 +202,14 @@ private fun MazeConnectApp(state: AppState) {
                         onUnpair = state::unpair,
                         onReconnect = state::reconnect,
                         onPairByAddress = state::requestPairingAtAddress,
+                        onScan = state::rescan,
                     )
                     1 -> DashboardScreen(
                         devices = devices,
                         selectedDeviceId = selectedDeviceId,
                         state = systemStatus,
                         onRefresh = state::refreshSystemStatus,
+                        onManualRefresh = state::refreshDashboard,
                     )
                     2 -> CommandsScreen(
                         devices = devices,
@@ -201,6 +243,21 @@ private fun MazeConnectApp(state: AppState) {
                     else -> SettingsScreen(
                         fingerprint = fingerprint,
                         displayFingerprint = state::displayFingerprint,
+                        installedVersion = state.installedVersionName,
+                        liveStatusSupported = state.liveStatusSupported,
+                        liveStatusEnabled = liveStatusEnabled,
+                        liveStatusPromotion = state::liveStatusPromotion,
+                        onSetLiveStatusEnabled = {
+                            state.liveStatusEnabled = it
+                            liveStatusEnabled = it
+                        },
+                        update = update,
+                        updateCheckEnabled = updateCheckEnabled,
+                        onSetUpdateCheckEnabled = {
+                            state.updateCheckEnabled = it
+                            updateCheckEnabled = it
+                        },
+                        onCheckForUpdate = state::checkForUpdateNow,
                     )
                 }
             }

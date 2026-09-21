@@ -58,13 +58,14 @@ class InteropTest {
         // The envelope is "v"/"t"/"c". A rename on one side alone would make
         // every message from that side unparseable on the other.
         val json = JSONObject(String(Message.unpair(42).toJson(), Charsets.UTF_8))
-        assertEquals(3, json.getInt("v"))
+        assertEquals(4, json.getInt("v"))
         assertEquals("unpair", json.getString("t"))
         assertEquals(42L, json.getLong("c"))
 
         // And the type names on the wire.
         assertEquals("hello", MessageType.HELLO.wire)
         assertEquals("pairRequest", MessageType.PAIR_REQUEST.wire)
+        assertEquals("pairReveal", MessageType.PAIR_REVEAL.wire)
         assertEquals("pairResponse", MessageType.PAIR_RESPONSE.wire)
         assertEquals("pairResult", MessageType.PAIR_RESULT.wire)
         assertEquals("fileOffer", MessageType.FILE_OFFER.wire)
@@ -75,16 +76,44 @@ class InteropTest {
         // Standard base64, no line wrapping. Qt's toBase64() must agree with
         // Base64.NO_WRAP here or pairing cannot complete.
         val nonce = ByteArray(Sas.NONCE_SIZE) { it.toByte() }
-        val json = JSONObject(String(Message.pairRequest(1, nonce).toJson(), Charsets.UTF_8))
+
+        // PairRequest carries the COMMITMENT, never the nonce. If either
+        // client ever puts the nonce back in this message the commitment round
+        // is gone and the on-screen code stops meaning anything (see Sas), so
+        // the absence of the key is asserted as strictly as its presence.
+        val commitment = Sas.commit(nonce)
+        assertNotNull(commitment)
+        val request = JSONObject(
+            String(Message.pairRequest(1, commitment!!).toJson(), Charsets.UTF_8),
+        )
+        assertFalse(request.has("nonce"))
+        assertEquals(
+            "Jz2nu+C6nOgcIlgQwwHoK6148NvbSJrusnW6o8PaWj4=",
+            request.getString("commitment"),
+        )
+
+        // The nonce itself travels in PairReveal, base64 the same way.
+        val reveal = JSONObject(
+            String(Message.pairReveal(2, nonce).toJson(), Charsets.UTF_8),
+        )
         assertEquals(
             "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
-            json.getString("nonce"),
+            reveal.getString("nonce"),
         )
 
         // And it survives a round trip through the validated accessor.
-        val parsed = Message.parse(Message.pairRequest(1, nonce).toJson())
+        val parsed = Message.parse(Message.pairReveal(2, nonce).toJson())
         assertNotNull(parsed)
         assertArrayEquals(nonce, parsed!!.binary("nonce", Sas.NONCE_SIZE))
+
+        val parsedRequest = Message.parse(Message.pairRequest(1, commitment).toJson())
+        assertNotNull(parsedRequest)
+        assertTrue(
+            Sas.verifyCommitment(
+                parsedRequest!!.binary("commitment", Sas.COMMIT_SIZE),
+                nonce,
+            ),
+        )
     }
 
     @Test
@@ -111,19 +140,22 @@ class InteropTest {
     fun counterZeroIsRejected() {
         // Both sides reserve 0 so an absent or zeroed counter is never a
         // valid first message.
-        assertNull(Message.parse("""{"v":3,"t":"unpair","c":0}""".toByteArray()))
-        assertNull(Message.parse("""{"v":3,"t":"unpair"}""".toByteArray()))
-        assertNull(Message.parse("""{"v":3,"t":"unpair","c":-1}""".toByteArray()))
-        assertNotNull(Message.parse("""{"v":3,"t":"unpair","c":1}""".toByteArray()))
+        assertNull(Message.parse("""{"v":4,"t":"unpair","c":0}""".toByteArray()))
+        assertNull(Message.parse("""{"v":4,"t":"unpair"}""".toByteArray()))
+        assertNull(Message.parse("""{"v":4,"t":"unpair","c":-1}""".toByteArray()))
+        assertNotNull(Message.parse("""{"v":4,"t":"unpair","c":1}""".toByteArray()))
     }
 
     @Test
     fun versionMismatchIsRejected() {
         // No negotiation to an older dialect: a mismatch is a hard stop.
-        assertNull(Message.parse("""{"v":4,"t":"unpair","c":1}""".toByteArray()))
-        assertNull(Message.parse("""{"v":2,"t":"unpair","c":1}""".toByteArray()))
+        assertNull(Message.parse("""{"v":5,"t":"unpair","c":1}""".toByteArray()))
+        // v3 is the version that sent the nonce in the clear. Refusing it is
+        // the point of the bump: negotiating down would restore the grinding
+        // attack.
+        assertNull(Message.parse("""{"v":3,"t":"unpair","c":1}""".toByteArray()))
         assertNull(Message.parse("""{"t":"unpair","c":1}""".toByteArray()))
-        assertNull(Message.parse("""{"v":3,"t":"nope","c":1}""".toByteArray()))
+        assertNull(Message.parse("""{"v":4,"t":"nope","c":1}""".toByteArray()))
     }
 
     @Test

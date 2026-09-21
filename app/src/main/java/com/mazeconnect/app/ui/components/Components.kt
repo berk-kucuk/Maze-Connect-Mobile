@@ -1,7 +1,9 @@
 package com.mazeconnect.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -60,6 +62,16 @@ fun MazeLabel(
  * outline when pressed. With no accent colour available, inversion is what
  * carries emphasis. Touch has no hover state, so the press state does the
  * work the desktop build gives to hover.
+ *
+ * Both variants must *visibly* change under the finger. A secondary button
+ * used not to: its fill was `Transparent` whether pressed or not and its
+ * text colour never moved, so pressing one produced no change of any kind.
+ * Every low-emphasis action in the app is a secondary button — Reconnect,
+ * Remove, Scan, Clear, Cancel, Decline — which is why the app felt like its
+ * buttons were dead even while they were firing correctly. A secondary
+ * button now flashes solid paper, and the primary keeps inverting; a
+ * primary is already paper-filled at rest, so flashing it white would be
+ * the one thing that could *not* read as a press.
  */
 @Composable
 fun MazeButton(
@@ -73,18 +85,28 @@ fun MazeButton(
     val pressed by interaction.collectIsPressedAsState()
     val colors = LocalMazeColors.current
 
+    // Instant on the way in, faded on the way out. A tap is often shorter
+    // than an animation, and easing *into* the press state meant a quick
+    // one began the transition and reversed before it was visible — the
+    // feedback arrived only for people who pressed and held.
+    val pressSpec: AnimationSpec<Color> = if (pressed) snap() else tween(140)
+
     val fill by animateColorAsState(
         targetValue = when {
-            !primary -> Color.Transparent
+            // Secondary: hollow at rest, solid paper under the finger.
+            !primary -> if (pressed) MazeColors.Paper else Color.Transparent
+            // Primary: paper at rest, hollowed out under the finger.
             pressed -> Color.Transparent
             else -> MazeColors.Paper
         },
-        animationSpec = tween(120),
+        animationSpec = pressSpec,
         label = "fill",
     )
     val content by animateColorAsState(
-        targetValue = if (primary && !pressed) MazeColors.Void else MazeColors.Paper,
-        animationSpec = tween(120),
+        // Text is void whenever the block behind it is filled, paper
+        // whenever it is hollow — which is exactly `primary != pressed`.
+        targetValue = if (primary != pressed) MazeColors.Void else MazeColors.Paper,
+        animationSpec = pressSpec,
         label = "content",
     )
     val alpha by animateFloatAsState(
@@ -99,7 +121,10 @@ fun MazeButton(
             .border(
                 BorderStroke(
                     1.dp,
-                    if (primary) MazeColors.Paper.copy(alpha = alpha)
+                    // A pressed secondary is paper-filled, so a hairline
+                    // border around it would read as a dim frame on a bright
+                    // block. It takes the paper edge for as long as it is held.
+                    if (primary || pressed) MazeColors.Paper.copy(alpha = alpha)
                     else colors.hairline,
                 ),
                 RectangleShape,

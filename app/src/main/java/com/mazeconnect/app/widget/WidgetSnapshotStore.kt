@@ -46,6 +46,17 @@ class WidgetSnapshotStore(context: Context) {
                 JSONObject()
                     .put("label", metric.label)
                     .put("percent", metric.percent.toDouble())
+                    // The computer sends a detail beside every reading — a
+                    // temperature, a used/total pair — and this file was
+                    // dropping it, so no widget could ever show it however
+                    // much room it had. It is the same class of information
+                    // as the percentage beside it, not the kind of naming
+                    // detail the counts below deliberately withhold.
+                    .put("detail", metric.detail)
+                    // Kept so a renderer can tell which reading leads
+                    // without guessing from the label, which is the
+                    // computer's display string and not stable.
+                    .put("key", metric.key)
             )
         }
         // Security services, network rows and hardening checks are all kept
@@ -90,14 +101,17 @@ class WidgetSnapshotStore(context: Context) {
             val row = array.optJSONObject(i) ?: continue
             metrics.add(
                 SystemStatus.Metric(
-                    key = "",
+                    key = row.optString("key"),
                     label = row.optString("label"),
                     // Clamped on the way out as well as on the way in: this
                     // file is ours, but a widget drawing a bar past its own
                     // width from a corrupt value would be a strange way to
                     // find that out.
                     percent = row.optDouble("percent", 0.0).toFloat().coerceIn(0f, 100f),
-                    detail = "",
+                    // Bounded here as well: an older file written before this
+                    // field existed simply yields "", which every renderer
+                    // already has to handle for a computer that sends none.
+                    detail = row.optString("detail").take(MAX_DETAIL_CHARS),
                 )
             )
         }
@@ -248,6 +262,10 @@ class WidgetSnapshotStore(context: Context) {
          *  see DashboardWidget). Smaller sizes just draw however many of
          *  these they have room for. */
         const val MAX_METERS = 4
+
+        /** A detail is a short label like "45 °C" or "17.5 / 31.3 GiB"; longer
+         *  than this it is not a detail and will not fit a widget anyway. */
+        private const val MAX_DETAIL_CHARS = 24
 
         /** Cells the Commands widget has — see widget_commands.xml. */
         const val MAX_PINNED_COMMANDS = 4

@@ -2,7 +2,9 @@ package com.mazeconnect.app.service
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import com.mazeconnect.core.DeviceManager
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,11 +36,29 @@ object Link {
     private var manager: DeviceManager? = null
     private var started = false
 
+    /**
+     * The last line of defence against the link killing the app.
+     *
+     * A SupervisorJob keeps one failed child from cancelling its siblings,
+     * but it does nothing about the exception itself: without a handler in
+     * the context, an uncaught throw in any coroutine launched on this scope
+     * goes to the thread's default handler, which on Android means the
+     * process dies. Every one of those coroutines is a background socket,
+     * timer, or message handler that runs for days with no screen attached,
+     * so the failure mode is the app vanishing with nothing to show for it.
+     *
+     * Logged rather than swallowed silently — this is a backstop for the
+     * unforeseen, not a licence to stop handling errors where they happen.
+     */
+    private val crashGuard = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "uncaught failure in the link scope", throwable)
+    }
+
     /** The manager, creating it on first use. Safe from any thread. */
     @Synchronized
     fun manager(context: Context): DeviceManager {
         manager?.let { return it }
-        val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Main + crashGuard)
         val created = DeviceManager(context.applicationContext, newScope)
         scope = newScope
         manager = created
@@ -76,4 +96,6 @@ object Link {
     }
 
     private fun defaultName(): String = Build.MODEL ?: "Android device"
+
+    private const val TAG = "MazeLink"
 }

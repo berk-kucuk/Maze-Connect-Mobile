@@ -43,9 +43,36 @@ open class DashboardWidget : AppWidgetProvider() {
 
     protected open val layout: Int get() = R.layout.widget_dashboard
 
-    /** The three-cell hardening/services/network row. Only this size — the
-     *  default 4x2 — has room for it. */
+    /** The three-cell hardening/services/network row. Only the sizes with
+     *  room for it declare true. */
     protected open val showStatCells: Boolean get() = true
+
+    /**
+     * Whether this layout has a place for the computer's detail string.
+     *
+     * The wide row (label | bar | value) has no room for "17.5 / 31.3 GiB"
+     * beside a 40dp value, so the sizes built on it leave the field out
+     * entirely rather than abbreviate it into nothing. The stacked sizes
+     * give it its own line and set this true; render() then fills it in
+     * without either of them knowing which size it is drawing.
+     */
+    protected open val hasDetail: Boolean get() = false
+
+    /**
+     * Readings this size leaves out.
+     *
+     * Only the 4x1 does, and only because it has to: one cell on a typical
+     * home screen leaves about 80dp once the launcher takes its own margin,
+     * and the four meters, the header and the three stat cells come to 91dp.
+     * Disk is the one dropped because it is the slowest to change of the
+     * four — a disk that was 5% full a minute ago still is — so it is the
+     * one a glance loses least by not having. Every larger size shows it.
+     *
+     * Matched on the computer's key first and its label second: the key is
+     * the stable identifier, but it comes from the computer's own helper and
+     * this app does not get to assume it is there.
+     */
+    protected open val hiddenMetricKeys: Set<String> get() = setOf("disk")
 
     override fun onUpdate(
         context: Context,
@@ -65,6 +92,7 @@ open class DashboardWidget : AppWidgetProvider() {
      * and no separate age line at this height; see widget_mini.xml.
      */
     class Mini : DashboardWidget() {
+        override val hiddenMetricKeys: Set<String> get() = emptySet()
         override val meterSlots: Int get() = 2
         override val layout: Int get() = R.layout.widget_mini
         override val showStatCells: Boolean get() = false
@@ -76,9 +104,41 @@ open class DashboardWidget : AppWidgetProvider() {
      * here has to know which size it is filling in.
      */
     class Compact : DashboardWidget() {
+        override val hiddenMetricKeys: Set<String> get() = emptySet()
         override val meterSlots: Int get() = 3
         override val layout: Int get() = R.layout.widget_compact
         override val showStatCells: Boolean get() = false
+    }
+
+    /**
+     * The 4x3 variant: the same four readings as the 4x2, with room to say
+     * what they mean.
+     *
+     * Two lines per metric — label, value and the computer's full detail on
+     * one, the bar at full width beneath. The 4x2 has to choose between the
+     * bar and the detail; this size does not have to choose.
+     */
+    class Detailed : DashboardWidget() {
+        override val hiddenMetricKeys: Set<String> get() = emptySet()
+        override val meterSlots: Int get() = 4
+        override val layout: Int get() = R.layout.widget_detailed
+        override val showStatCells: Boolean get() = true
+        override val hasDetail: Boolean get() = true
+    }
+
+    /**
+     * The 2x2 square: two readings with their detail, in the footprint of
+     * four app icons.
+     *
+     * Uses the stacked row rather than the wide one because at this width
+     * three columns leave the bar narrower than the padding around it.
+     */
+    class Tile : DashboardWidget() {
+        override val hiddenMetricKeys: Set<String> get() = emptySet()
+        override val meterSlots: Int get() = 2
+        override val layout: Int get() = R.layout.widget_tile
+        override val showStatCells: Boolean get() = false
+        override val hasDetail: Boolean get() = true
     }
 
     companion object {
@@ -99,6 +159,10 @@ open class DashboardWidget : AppWidgetProvider() {
         private val ROWS = intArrayOf(
             R.id.meter_row_1, R.id.meter_row_2, R.id.meter_row_3, R.id.meter_row_4,
         )
+        private val DETAILS = intArrayOf(
+            R.id.meter_detail_1, R.id.meter_detail_2,
+            R.id.meter_detail_3, R.id.meter_detail_4,
+        )
 
         // One instance per registered provider, used only to read its size
         // (layout/slots/flags) by class — never through the Android
@@ -109,7 +173,7 @@ open class DashboardWidget : AppWidgetProvider() {
         // updates were drawing one meter instead of the three its own layout
         // has room for.
         private val SIZES: List<DashboardWidget> =
-            listOf(Mini(), Compact(), DashboardWidget())
+            listOf(Mini(), Tile(), Compact(), DashboardWidget(), Detailed())
 
         /**
          * Redraw every placed widget, of every size.
@@ -183,8 +247,14 @@ open class DashboardWidget : AppWidgetProvider() {
             )
             views.setTextViewText(R.id.widget_age, ageLabel(context, savedAtMillis))
 
+            val shown = status.metrics.filterNot { metric ->
+                size.hiddenMetricKeys.any {
+                    it.equals(metric.key, ignoreCase = true) ||
+                        it.equals(metric.label, ignoreCase = true)
+                }
+            }
             for (i in 0 until size.meterSlots) {
-                val metric = status.metrics.getOrNull(i)
+                val metric = shown.getOrNull(i)
                 if (metric == null) {
                     views.setViewVisibility(ROWS[i], View.GONE)
                     continue
@@ -193,6 +263,18 @@ open class DashboardWidget : AppWidgetProvider() {
                 views.setTextViewText(LABELS[i], metric.label)
                 views.setProgressBar(BARS[i], 100, metric.percent.toInt(), false)
                 views.setTextViewText(VALUES[i], "${metric.percent.toInt()}%")
+                if (size.hasDetail) {
+                    // Hidden rather than left blank when the computer sends
+                    // none: an empty view still takes its line, and a row
+                    // with a gap where a number should be reads as a reading
+                    // that failed rather than one that was never offered.
+                    if (metric.detail.isEmpty()) {
+                        views.setViewVisibility(DETAILS[i], View.GONE)
+                    } else {
+                        views.setViewVisibility(DETAILS[i], View.VISIBLE)
+                        views.setTextViewText(DETAILS[i], metric.detail)
+                    }
+                }
             }
 
             // Only the 4x2 has room for these: hardening score, security

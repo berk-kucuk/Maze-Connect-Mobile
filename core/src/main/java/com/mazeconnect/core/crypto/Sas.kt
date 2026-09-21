@@ -21,12 +21,30 @@ import java.security.SecureRandom
  * preserves the property that matters: a man-in-the-middle cannot forge
  * either key, so it must present its own to each side, and the two screens
  * then show different codes.
+ *
+ * WHY THE NONCE IS COMMITTED TO BEFORE IT IS REVEALED
+ * ---------------------------------------------------
+ * That argument holds only while neither side can choose its nonce after
+ * seeing the other's. It did not: the exchange was one round, so a
+ * man-in-the-middle running both halves could fix the far side's code first
+ * and then search its own nonce until the near side matched. Six digits is
+ * 10^6 — under a second — and then both humans see the same number.
+ *
+ * So pairing is three messages: PairRequest carries commit(nonce),
+ * PairResponse carries the responder's nonce, and PairReveal opens the
+ * initiator's. Neither side can move its contribution after learning the
+ * other's. Must stay byte-identical to the desktop `Sas::commit`.
  */
 object Sas {
     const val DIGITS = 6
     const val NONCE_SIZE = 32
+    const val COMMIT_SIZE = 32
 
     private const val CONTEXT = "maze-connect/sas/v1"
+
+    // Separate context for the commitment: the same nonce goes into both
+    // hashes, and a shared string would let one be presented as the other.
+    private const val COMMIT_CONTEXT = "maze-connect/sas-commit/v1"
 
     // SPKI DER for P-256 is 91 bytes; bounds-checked rather than fixed so a
     // future curve change cannot silently pass a malformed key.
@@ -36,6 +54,32 @@ object Sas {
     private val random = SecureRandom()
 
     fun generateNonce(): ByteArray = ByteArray(NONCE_SIZE).also { random.nextBytes(it) }
+
+    /**
+     * Binding commitment to a nonce, sent before the nonce itself. Null for a
+     * wrong-sized nonce; callers must treat null as a hard failure.
+     */
+    fun commit(nonce: ByteArray): ByteArray? {
+        if (nonce.size != NONCE_SIZE) return null
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(COMMIT_CONTEXT.toByteArray(Charsets.US_ASCII))
+        appendLengthPrefixed(digest, nonce)
+        return digest.digest()
+    }
+
+    /**
+     * Constant-time check that [nonce] is the one [commitment] named.
+     *
+     * MessageDigest.isEqual is the constant-time comparison on Android. A
+     * mismatch here means an active attacker is present, and that is the last
+     * moment to avoid telling them how much of their guess was right.
+     */
+    fun verifyCommitment(commitment: ByteArray?, nonce: ByteArray?): Boolean {
+        if (commitment == null || nonce == null) return false
+        val expected = commit(nonce) ?: return false
+        if (commitment.size != expected.size) return false
+        return MessageDigest.isEqual(commitment, expected)
+    }
 
     fun isPlausiblePublicKey(key: ByteArray): Boolean = key.size in MIN_KEY_SIZE..MAX_KEY_SIZE
 

@@ -14,6 +14,7 @@ enum class MessageType(val wire: String) {
     HELLO("hello"),
     PAIR_REQUEST("pairRequest"),
     PAIR_RESPONSE("pairResponse"),
+    PAIR_REVEAL("pairReveal"),
     PAIR_RESULT("pairResult"),
     UNPAIR("unpair"),
     FILE_OFFER("fileOffer"),
@@ -227,13 +228,20 @@ class Message private constructor(
             put("capabilities", JSONArray(capabilities))
         }
 
-        fun pairRequest(counter: Long, nonce: ByteArray) =
+        /** Carries commit(nonce), never the nonce itself — see Sas. */
+        fun pairRequest(counter: Long, commitment: ByteArray) =
             build(MessageType.PAIR_REQUEST, counter) {
-                put("nonce", Base64.getEncoder().encodeToString(nonce))
+                put("commitment", Base64.getEncoder().encodeToString(commitment))
             }
 
         fun pairResponse(counter: Long, nonce: ByteArray) =
             build(MessageType.PAIR_RESPONSE, counter) {
+                put("nonce", Base64.getEncoder().encodeToString(nonce))
+            }
+
+        /** Opens the initiator's commitment, after the responder is committed. */
+        fun pairReveal(counter: Long, nonce: ByteArray) =
+            build(MessageType.PAIR_REVEAL, counter) {
                 put("nonce", Base64.getEncoder().encodeToString(nonce))
             }
 

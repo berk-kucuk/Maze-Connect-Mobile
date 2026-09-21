@@ -20,13 +20,43 @@
   ("Hardening 72% · 4/5 services"). A sentence that dense is exactly the
   kind of thing a glance skips past; three short numbers in their own boxes
   are not.
+
+  The meter rows carry layout_weight rather than wrap_content, and that is a
+  fix rather than a flourish. The root fills the frame the launcher hands it,
+  but wrap_content children pile up at the top — so on a home screen whose
+  cells are taller than this content the widget drew itself into the top half
+  and left the rest an empty black slab. Weighted rows spread the slack
+  between them instead, so any allocation looks deliberate.
+
+  NestedWeights is suppressed on the meter rows, deliberately.
+
+  The check is right about the mechanism: a weighted row inside a weighted
+  container costs an extra measure pass, and the bars inside these rows are
+  weighted too. It is wrong about the cost here. This is four rows in a tree a
+  dozen views deep, re-inflated when a snapshot lands — at most once every two
+  minutes, and never during a scroll or an animation. The alternative is
+  pinning the rows to the top and leaving the rest of the card an empty slab,
+  which is the bug this replaced.
+
+  The root wraps its content rather than filling the frame, and that is what
+  keeps the card the size of what is in it.
+
+  A widget is handed a whole number of cells, which is almost never the height
+  of this layout. With match_parent the background drawable painted all of it,
+  so the leftover showed up as black — at the bottom if the children stacked
+  from the top, or split above and below if they were centred. Both were
+  reported as "empty space in the widget", and both were the same mistake:
+  arranging the slack instead of not painting it. wrap_content leaves the
+  remainder transparent, so the card ends where the content ends and the
+  wallpaper shows through the rest.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="14dp">
+    android:padding="6dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -39,7 +69,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="#F2F1EC"
-            android:textSize="14sp"
+            android:textSize="17sp"
             android:maxLines="1"
             android:ellipsize="end"
             android:text="@string/widget_no_computer" />
@@ -49,15 +79,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#7A7A7F"
-            android:textSize="10sp"
+            android:textSize="12sp"
             android:maxLines="1" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_meters"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="4dp"
         android:orientation="vertical">
 
         <LinearLayout
@@ -65,20 +96,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="6dp"
+            android:layout_marginBottom="1dp"
             android:gravity="center_vertical">
             <TextView android:id="@+id/meter_label_1"
                 android:layout_width="56dp" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+                android:minHeight="18dp"
+                android:gravity="center_vertical"
+                android:textColor="#7A7A7F" android:textSize="12sp" android:maxLines="1" />
             <ProgressBar android:id="@+id/meter_bar_1"
                 style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:layout_width="0dp" android:layout_height="7dp" android:layout_weight="1"
                 android:max="100"
                 android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
             <TextView android:id="@+id/meter_value_1"
                 android:layout_width="40dp" android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:textColor="#F2F1EC" android:textSize="12sp"
                 android:gravity="end" android:maxLines="1" />
         </LinearLayout>
 
@@ -87,20 +120,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="6dp"
+            android:layout_marginBottom="1dp"
             android:gravity="center_vertical">
             <TextView android:id="@+id/meter_label_2"
                 android:layout_width="56dp" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+                android:minHeight="18dp"
+                android:gravity="center_vertical"
+                android:textColor="#7A7A7F" android:textSize="12sp" android:maxLines="1" />
             <ProgressBar android:id="@+id/meter_bar_2"
                 style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:layout_width="0dp" android:layout_height="7dp" android:layout_weight="1"
                 android:max="100"
                 android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
             <TextView android:id="@+id/meter_value_2"
                 android:layout_width="40dp" android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:textColor="#F2F1EC" android:textSize="12sp"
                 android:gravity="end" android:maxLines="1" />
         </LinearLayout>
 
@@ -109,20 +144,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="6dp"
+            android:layout_marginBottom="1dp"
             android:gravity="center_vertical">
             <TextView android:id="@+id/meter_label_3"
                 android:layout_width="56dp" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+                android:minHeight="18dp"
+                android:gravity="center_vertical"
+                android:textColor="#7A7A7F" android:textSize="12sp" android:maxLines="1" />
             <ProgressBar android:id="@+id/meter_bar_3"
                 style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:layout_width="0dp" android:layout_height="7dp" android:layout_weight="1"
                 android:max="100"
                 android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
             <TextView android:id="@+id/meter_value_3"
                 android:layout_width="40dp" android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:textColor="#F2F1EC" android:textSize="12sp"
                 android:gravity="end" android:maxLines="1" />
         </LinearLayout>
 
@@ -134,16 +171,18 @@
             android:gravity="center_vertical">
             <TextView android:id="@+id/meter_label_4"
                 android:layout_width="56dp" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="10sp" android:maxLines="1" />
+                android:minHeight="18dp"
+                android:gravity="center_vertical"
+                android:textColor="#7A7A7F" android:textSize="12sp" android:maxLines="1" />
             <ProgressBar android:id="@+id/meter_bar_4"
                 style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="0dp" android:layout_height="4dp" android:layout_weight="1"
+                android:layout_width="0dp" android:layout_height="7dp" android:layout_weight="1"
                 android:max="100"
                 android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
             <TextView android:id="@+id/meter_value_4"
                 android:layout_width="40dp" android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:textColor="#F2F1EC" android:textSize="10sp"
+                android:textColor="#F2F1EC" android:textSize="12sp"
                 android:gravity="end" android:maxLines="1" />
         </LinearLayout>
     </LinearLayout>
@@ -155,55 +194,55 @@
         android:id="@+id/widget_stats"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="4dp"
         android:orientation="horizontal"
         android:baselineAligned="false">
 
         <LinearLayout
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:layout_marginEnd="6dp"
-            android:orientation="vertical" android:gravity="center_horizontal"
+            android:orientation="horizontal" android:gravity="center"
             android:background="@drawable/widget_cell"
-            android:paddingVertical="6dp">
+            android:paddingVertical="4dp">
             <TextView android:id="@+id/stat_hardening_value"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="13sp" android:maxLines="1" />
+                android:textColor="#F2F1EC" android:textSize="16sp" android:maxLines="1" />
             <TextView
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:textColor="#7A7A7F" android:textSize="8sp" android:maxLines="1"
+                android:layout_marginStart="5dp"
+                android:textColor="#7A7A7F" android:textSize="11sp" android:maxLines="1"
                 android:text="@string/widget_stat_hardening" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:layout_marginEnd="6dp"
-            android:orientation="vertical" android:gravity="center_horizontal"
+            android:orientation="horizontal" android:gravity="center"
             android:background="@drawable/widget_cell"
-            android:paddingVertical="6dp">
+            android:paddingVertical="4dp">
             <TextView android:id="@+id/stat_services_value"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="13sp" android:maxLines="1" />
+                android:textColor="#F2F1EC" android:textSize="16sp" android:maxLines="1" />
             <TextView
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:textColor="#7A7A7F" android:textSize="8sp" android:maxLines="1"
+                android:layout_marginStart="5dp"
+                android:textColor="#7A7A7F" android:textSize="11sp" android:maxLines="1"
                 android:text="@string/widget_stat_services" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical" android:gravity="center_horizontal"
+            android:orientation="horizontal" android:gravity="center"
             android:background="@drawable/widget_cell"
-            android:paddingVertical="6dp">
+            android:paddingVertical="4dp">
             <TextView android:id="@+id/stat_network_value"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="13sp" android:maxLines="1" />
+                android:textColor="#F2F1EC" android:textSize="16sp" android:maxLines="1" />
             <TextView
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:textColor="#7A7A7F" android:textSize="8sp" android:maxLines="1"
+                android:layout_marginStart="5dp"
+                android:textColor="#7A7A7F" android:textSize="11sp" android:maxLines="1"
                 android:text="@string/widget_stat_network" />
         </LinearLayout>
     </LinearLayout>
@@ -212,8 +251,8 @@
         android:id="@+id/widget_hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="4dp"
         android:textColor="#7A7A7F"
-        android:textSize="11sp"
+        android:textSize="13sp"
         android:visibility="gone" />
 </LinearLayout>

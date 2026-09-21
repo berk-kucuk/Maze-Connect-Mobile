@@ -11,13 +11,22 @@
   CommandsView.qml's "Show on phone widget" toggle) and written down by
   WidgetSnapshotStore whenever a catalog arrives; this layout only ever
   draws whatever it was handed.
+
+  The root wraps its content rather than filling the frame.
+
+  A widget is handed a whole number of cells, which is almost never the height
+  of this layout. With match_parent the background drawable painted all of it,
+  so the leftover showed up as a black band — the "empty space in the widget"
+  reported on every size. Arranging that slack (top, centred, spread between
+  rows) only moved the band around. wrap_content leaves the remainder
+  transparent instead, so the card ends where the content ends.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="10dp">
+    android:padding="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -29,7 +38,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="#F2F1EC"
-            android:textSize="11sp"
+            android:textSize="14sp"
             android:maxLines="1"
             android:ellipsize="end"
             android:text="@string/widget_no_computer" />
@@ -38,7 +47,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#7A7A7F"
-            android:textSize="10sp"
+            android:textSize="12sp"
             android:maxLines="1" />
     </LinearLayout>
 
@@ -54,12 +63,12 @@
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:layout_marginEnd="4dp"
-            android:paddingTop="10dp" android:paddingBottom="10dp"
+            android:paddingTop="13dp" android:paddingBottom="13dp"
             android:paddingStart="4dp" android:paddingEnd="4dp"
             android:background="@drawable/widget_cell">
             <TextView android:id="@+id/command_name_1"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="11sp"
+                android:textColor="#F2F1EC" android:textSize="14sp"
                 android:maxLines="2" android:gravity="center" />
         </LinearLayout>
 
@@ -67,12 +76,12 @@
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:layout_marginEnd="4dp"
-            android:paddingTop="10dp" android:paddingBottom="10dp"
+            android:paddingTop="13dp" android:paddingBottom="13dp"
             android:paddingStart="4dp" android:paddingEnd="4dp"
             android:background="@drawable/widget_cell">
             <TextView android:id="@+id/command_name_2"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="11sp"
+                android:textColor="#F2F1EC" android:textSize="14sp"
                 android:maxLines="2" android:gravity="center" />
         </LinearLayout>
 
@@ -80,12 +89,12 @@
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:layout_marginEnd="4dp"
-            android:paddingTop="10dp" android:paddingBottom="10dp"
+            android:paddingTop="13dp" android:paddingBottom="13dp"
             android:paddingStart="4dp" android:paddingEnd="4dp"
             android:background="@drawable/widget_cell">
             <TextView android:id="@+id/command_name_3"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="11sp"
+                android:textColor="#F2F1EC" android:textSize="14sp"
                 android:maxLines="2" android:gravity="center" />
         </LinearLayout>
 
@@ -93,12 +102,12 @@
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center"
-            android:paddingTop="10dp" android:paddingBottom="10dp"
+            android:paddingTop="13dp" android:paddingBottom="13dp"
             android:paddingStart="4dp" android:paddingEnd="4dp"
             android:background="@drawable/widget_cell">
             <TextView android:id="@+id/command_name_4"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="11sp"
+                android:textColor="#F2F1EC" android:textSize="14sp"
                 android:maxLines="2" android:gravity="center" />
         </LinearLayout>
     </LinearLayout>
@@ -109,6 +118,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:textColor="#7A7A7F"
-        android:textSize="10sp"
+        android:textSize="12sp"
         android:visibility="gone" />
 </LinearLayout>

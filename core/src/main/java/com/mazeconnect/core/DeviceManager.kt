@@ -30,6 +30,7 @@ import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.UUID
+import java.security.cert.X509Certificate
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 
@@ -190,6 +191,22 @@ sealed interface DeviceEvent {
      *  notification, since this can arrive with the app backgrounded) is
      *  the service's job, not this event's — see MazeConnectService. */
     data class OpenOnPhone(val deviceId: String, val text: String) : DeviceEvent
+
+    /**
+     * A computer is asking to pair, and the code is ready to compare.
+     *
+     * The verification dialog lives in the Activity, so a request arriving
+     * while the app is backgrounded or the phone is locked used to be
+     * completely invisible: the computer said "asking that device to pair"
+     * and the phone showed nothing at all. Same shape as [OpenOnPhone] —
+     * this only reports; the service decides how to raise it.
+     *
+     * Carries no verification code on purpose. A SAS compared from a
+     * notification shade is a SAS compared without the context that makes
+     * it mean anything; the tap opens the app and the comparison happens
+     * there, as it always did.
+     */
+    data class PairingRequested(val deviceId: String, val deviceName: String) : DeviceEvent
 }
 
 /**
@@ -343,6 +360,8 @@ class DeviceManager(
         var peerCapabilities: Set<Capability> = emptySet(),
         var ourNonce: ByteArray? = null,
         var theirNonce: ByteArray? = null,
+        /** What the initiator committed to, until PairReveal opens it. */
+        var theirCommitment: ByteArray? = null,
     )
 
     /**
@@ -413,9 +432,41 @@ class DeviceManager(
      * whether it reconnected.
      */
     fun onNetworkAvailable() {
-        Log.i(TAG, "network available: re-announcing and reconnecting")
-        beacon.refresh()
-        reconnectPairedDevices()
+        // Hopped onto the manager's own scope rather than run inline.
+        // ConnectivityManager delivers this on a binder thread of its own,
+        // and everything below reaches state that the rest of the class
+        // touches from the main thread and the link read loops — running it
+        // on a third thread is how a Wi-Fi change while backgrounded turned
+        // into a crash rather than a reconnect.
+        scope.launch {
+            Log.i(TAG, "network available: re-announcing and reconnecting")
+            beacon.refresh()
+            reconnectPairedDevices()
+        }
+    }
+
+    /**
+     * Start discovery over, because the user asked.
+     *
+     * Distinct from [forceReconnect], which is about one already-paired
+     * device: this is for the case where the device list itself is empty or
+     * stale and there is nothing to press "reconnect" on. The beacon socket
+     * is torn down and re-joined on every interface, an announcement goes out
+     * immediately rather than at the next five-second tick, and anything
+     * paired is redialled.
+     *
+     * The reason it needs to exist at all: discovery is passive, so a user
+     * looking at an empty list has no way to tell "nothing is there" from
+     * "we stopped listening properly", and no way to act on either. A visible
+     * scan makes the passive case pressable.
+     */
+    fun rescan() {
+        scope.launch {
+            Log.i(TAG, "manual rescan")
+            beacon.refresh()
+            beacon.announce()
+            reconnectPairedDevices()
+        }
     }
 
     fun stop() {
@@ -461,7 +512,36 @@ class DeviceManager(
                 runCatching { socket.close() }
                 continue
             }
-            withContext(Dispatchers.Main) { adopt(Connection(socket, trustManager, scope)) }
+            // The handshake above ran through the *listener's* trust manager,
+            // not the one created three lines up: an SSLServerSocket is built
+            // from one SSLContext and every socket it accepts uses that
+            // context. So this manager has seen no certificate and its
+            // peerPublicKey is null — which made adopt() return false on its
+            // very first line, silently, without attaching a handler, without
+            // starting the read loop, and without closing the socket.
+            //
+            // Every inbound connection died exactly there. The phone
+            // completed TLS and then said nothing at all: no hello, no
+            // pairResponse, no disconnect. That is why pressing Pair on the
+            // computer produced no reaction here and no verification code
+            // anywhere, while pairing *initiated from the phone* worked fine
+            // — that path uses tls.connect(), which hands back the manager
+            // that actually performed the handshake.
+            val chain = runCatching {
+                socket.session.peerCertificates
+                    .filterIsInstance<X509Certificate>()
+                    .toTypedArray()
+            }.getOrNull()
+            if (!trustManager.adoptCompletedHandshake(chain)) {
+                Log.w(TAG, "refusing an inbound link: no usable peer key")
+                runCatching { socket.close() }
+                continue
+            }
+            withContext(Dispatchers.Main) {
+                if (!adopt(Connection(socket, trustManager, scope))) {
+                    runCatching { socket.close() }
+                }
+            }
         }
     }
 
@@ -486,6 +566,13 @@ class DeviceManager(
 
             val connection = Connection(socket, trustManager, scope)
             val nonce = Sas.generateNonce()
+            // Commit to the nonce now, reveal it only after PairResponse lands.
+            val commitment = Sas.commit(nonce)
+            if (commitment == null) {
+                emit(DeviceEvent.PairingFailed(targetDeviceId, "could not commit to the pairing nonce"))
+                runCatching { socket.close() }
+                return@launch
+            }
 
             withContext(Dispatchers.Main) {
                 // The pending pairing and the nonce are in place before the
@@ -500,7 +587,7 @@ class DeviceManager(
                 )
 
                 val adopted = adopt(connection, targetDeviceId, ourNonce = nonce) {
-                    connection.send(Message.pairRequest(connection.nextCounter(), nonce))
+                    connection.send(Message.pairRequest(connection.nextCounter(), commitment))
                 }
                 if (!adopted) {
                     _pendingPairing.value = null
@@ -558,11 +645,21 @@ class DeviceManager(
      * fast, visible way out for a user staring at "not reachable" right now.
      * Closing here is enough on its own: [Connection.onClosed] already
      * removes the link and [reconnectPairedDevices] already redials anything
-     * paired and currently seen by the beacon.
+     * paired and either currently seen by the beacon or last reached at a
+     * known address.
+     *
+     * Also rebinds the discovery beacon's multicast socket, the same as
+     * [onNetworkAvailable] does. A `MulticastSocket` is bound to whatever
+     * interface existed when it was opened; after the phone has been
+     * backgrounded or idle for a while that binding can go quiet even
+     * though Wi-Fi itself never dropped, and a tap on "Reconnect" is
+     * exactly the moment that needs fixing immediately rather than on the
+     * next network-change callback.
      */
     fun forceReconnect(targetDeviceId: String): Boolean {
         if (store.forId(targetDeviceId) == null) return false
         links[targetDeviceId]?.connection?.close("manual reconnect")
+        beacon.refresh()
         reconnectPairedDevices()
         return true
     }
@@ -607,7 +704,13 @@ class DeviceManager(
         ourNonce: ByteArray? = null,
         afterHello: (suspend () -> Unit)? = null,
     ): Boolean {
-        val key = connection.peerPublicKey ?: return false
+        val key = connection.peerPublicKey ?: run {
+            // Never expected once the caller has established a peer key, and
+            // it used to be the quietest possible failure: no link, no log,
+            // no closed socket. Say it out loud.
+            Log.w(TAG, "not adopting a link with no peer key")
+            return false
+        }
         val paired = store.forKey(key)
         val id = expectedId ?: paired?.deviceId ?: "pending-${UUID.randomUUID()}"
 
@@ -633,6 +736,19 @@ class DeviceManager(
             // and be dropped — which is how a reconnected dashboard stays
             // blank even though the link came back.
             forgetPendingWork(link.deviceId)
+            // A pairing in progress dies with its link, and saying so here is
+            // not cosmetic. `_pendingPairing` is a single slot guarded by
+            // "one pairing at a time": requestPairingAt() returns early while
+            // it is occupied, and handlePairResponse() measures every reply
+            // against it. Left behind by a link that closed mid-handshake —
+            // the user never saw the dialog because the app was in the
+            // background, the computer gave up, the network blinked — it
+            // poisons every later attempt, and the phone can then never pair
+            // with anything again until the process restarts. That is exactly
+            // the "pressing Pair on the computer does nothing" fault.
+            if (_pendingPairing.value?.deviceId == link.deviceId) {
+                _pendingPairing.value = null
+            }
             if (reason != null && !link.trusted) {
                 emit(DeviceEvent.PairingFailed(link.deviceId, reason))
             }
@@ -697,6 +813,7 @@ class DeviceManager(
             MessageType.PAIR_REQUEST -> handlePairRequest(link, message)
 
             MessageType.PAIR_RESPONSE -> handlePairResponse(link, message)
+            MessageType.PAIR_REVEAL -> handlePairReveal(link, message)
 
             MessageType.PAIR_RESULT -> {
                 val pending = _pendingPairing.value ?: return
@@ -870,6 +987,49 @@ class DeviceManager(
             return
         }
 
+        // The request carries only a COMMITMENT to the initiator's nonce. We
+        // must choose ours without knowing theirs — that is the whole point of
+        // the round; see Sas. No code is derived and nothing is shown to the
+        // user yet: that waits for PairReveal.
+        val theirCommitment = message.binary("commitment", Sas.COMMIT_SIZE)
+        if (theirCommitment == null) {
+            link.connection.close("malformed pairing commitment")
+            return
+        }
+
+        val ourNonce = Sas.generateNonce()
+        link.theirCommitment = theirCommitment
+        link.theirNonce = null
+        link.ourNonce = ourNonce
+
+        scope.launch {
+            link.connection.send(Message.pairResponse(link.connection.nextCounter(), ourNonce))
+        }
+    }
+
+    /**
+     * The initiator opens the commitment it sent in PairRequest.
+     *
+     * Until it matches, the nonce is not theirs to choose any more — which is
+     * exactly the move a man-in-the-middle needs in order to make both screens
+     * show the same six digits.
+     */
+    private fun handlePairReveal(link: Link, message: Message) {
+        if (link.trusted) {
+            link.connection.close("pair reveal on an already-paired link")
+            return
+        }
+        val theirCommitment = link.theirCommitment
+        val ourNonce = link.ourNonce
+        if (theirCommitment == null || ourNonce == null) {
+            link.connection.close("pair reveal without a pair request")
+            return
+        }
+        if (_pendingPairing.value?.deviceId == link.deviceId) {
+            link.connection.close("pair reveal repeated")
+            return
+        }
+
         val theirNonce = message.binary("nonce", Sas.NONCE_SIZE)
         val ourKey = keyStore.publicKey()
         val theirKey = link.connection.peerPublicKey
@@ -877,20 +1037,17 @@ class DeviceManager(
             link.connection.close("malformed pairing nonce")
             return
         }
-
-        val ourNonce = Sas.generateNonce()
+        if (!Sas.verifyCommitment(theirCommitment, theirNonce)) {
+            link.connection.close("pairing commitment does not match")
+            return
+        }
         link.theirNonce = theirNonce
-        link.ourNonce = ourNonce
 
         // We are the responder, so the initiator's key comes first.
         val code = Sas.derive(theirKey, ourKey, theirNonce, ourNonce)
         if (code == null) {
             link.connection.close("could not derive a verification code")
             return
-        }
-
-        scope.launch {
-            link.connection.send(Message.pairResponse(link.connection.nextCounter(), ourNonce))
         }
 
         _pendingPairing.value = PendingPairing(
@@ -900,6 +1057,10 @@ class DeviceManager(
             verificationCode = code,
             weInitiated = false,
         )
+        // Only now, with a code actually derived: a notification raised
+        // before this point would send the user to a dialog with nothing
+        // in it to compare.
+        emit(DeviceEvent.PairingRequested(link.deviceId, link.deviceName))
     }
 
     private fun handlePairResponse(link: Link, message: Message) {
@@ -934,6 +1095,13 @@ class DeviceManager(
         if (code == null) {
             link.connection.close("could not derive a verification code")
             return
+        }
+
+        // Only now open our commitment. Sending the nonce earlier would have
+        // let the responder choose theirs against a known value, which is the
+        // whole thing the commitment exists to prevent.
+        scope.launch {
+            link.connection.send(Message.pairReveal(link.connection.nextCounter(), ourNonce))
         }
 
         Log.i(TAG, "verification code ready")
@@ -1395,14 +1563,41 @@ class DeviceManager(
      * beacon sighting, and from a network change.
      */
     fun reconnectPairedDevices() {
+        val seenIds = mutableSetOf<String>()
         for (seen in beacon.devices.value) {
             // Only computers, only ones already trusted, only ones not
             // already linked or being dialed.
             if (seen.deviceType == "mobile") continue
             if (store.forId(seen.deviceId) == null) continue
+            seenIds += seen.deviceId
             if (links.containsKey(seen.deviceId)) continue
             if (!outboundPending.add(seen.deviceId)) continue
             connectToPaired(seen.address, seen.port, seen.deviceId)
+        }
+
+        // The discovery beacon depends on a UDP multicast packet actually
+        // arriving in the last ~17 seconds — background network throttling,
+        // Doze, or just one dropped packet is enough to make it go quiet
+        // while the computer is still sitting at the address it always is.
+        // Falling back to the last address that worked means a stale beacon
+        // no longer strands an otherwise-reachable computer, and it is why
+        // a manual reconnect (forceReconnect) has something to actually do
+        // even when nothing has been announced recently. Still runs the
+        // full mutual-TLS handshake and key pin check either way — this is
+        // only a guess at *where* to dial, never *who* answers.
+        for (device in store.all()) {
+            if (device.deviceType != "desktop") continue
+            if (device.deviceId in seenIds) continue
+            if (links.containsKey(device.deviceId)) continue
+            val address = device.lastAddress ?: continue
+            val port = device.lastPort ?: continue
+            if (!outboundPending.add(device.deviceId)) continue
+            val resolved = runCatching { InetAddress.getByName(address) }.getOrNull()
+            if (resolved == null) {
+                outboundPending.remove(device.deviceId)
+                continue
+            }
+            connectToPaired(resolved, port, device.deviceId)
         }
     }
 
@@ -1415,17 +1610,38 @@ class DeviceManager(
      */
     private fun connectToPaired(address: InetAddress, port: Int, targetDeviceId: String) {
         scope.launch(Dispatchers.IO) {
-            val result = runCatching { tls.connect(address, port, allowUnpaired = false) }
-            val (socket, trustManager) = result.getOrElse {
-                Log.i(TAG, "reconnect to $targetDeviceId failed: ${it.message}")
+            // finally, not a remove() on each path out.
+            //
+            // outboundPending is what stops a burst of beacons opening five
+            // sockets to one computer, and reconnectPairedDevices() skips any
+            // device already in it. So an entry that is not removed is not a
+            // small leak: that computer is never dialled again for the life of
+            // the process, and forceReconnect() — the Reconnect button —
+            // returns true having done nothing observable. Removing on the
+            // two success-shaped paths left every other way out of this
+            // coroutine (adopt() throwing, the scope being cancelled between
+            // the connect and the hand-off) holding the slot forever.
+            try {
+                val result = runCatching { tls.connect(address, port, allowUnpaired = false) }
+                val (socket, trustManager) = result.getOrElse {
+                    Log.i(TAG, "reconnect to $targetDeviceId failed: ${it.message}")
+                    return@launch
+                }
+                val connection = Connection(socket, trustManager, scope)
+                withContext(Dispatchers.Main) {
+                    if (!adopt(connection, targetDeviceId)) {
+                        connection.close("could not start the link")
+                    } else {
+                        // Worked — remember this address so the next reconnect
+                        // does not depend on the discovery beacon having seen
+                        // the computer recently (see reconnectPairedDevices()).
+                        address.hostAddress?.let {
+                            store.updateLastAddress(targetDeviceId, it, port)
+                        }
+                    }
+                }
+            } finally {
                 outboundPending.remove(targetDeviceId)
-                return@launch
-            }
-            val connection = Connection(socket, trustManager, scope)
-            withContext(Dispatchers.Main) {
-                val adopted = adopt(connection, targetDeviceId)
-                outboundPending.remove(targetDeviceId)
-                if (!adopted) connection.close("could not start the link")
             }
         }
     }
@@ -1731,6 +1947,7 @@ class DeviceManager(
             MessageType.HELLO,
             MessageType.PAIR_REQUEST,
             MessageType.PAIR_RESPONSE,
+            MessageType.PAIR_REVEAL,
             MessageType.PAIR_RESULT,
         )
     }

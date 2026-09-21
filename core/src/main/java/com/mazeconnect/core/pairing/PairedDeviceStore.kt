@@ -16,6 +16,14 @@ data class PairedDevice(
     val publicKey: ByteArray,
     val pairedAtEpochSeconds: Long,
     val enabledCapabilities: Set<Capability> = Capability.DEFAULT_ENABLED,
+    // Where we last successfully reached this device. A reconnect hint, not
+    // a trust anchor — the address alone opens nothing; every reconnect
+    // still runs the full mutual-TLS handshake and key pin check. Kept so a
+    // stale or momentarily-missed discovery beacon (background throttling,
+    // a dropped multicast packet) does not strand a computer that is still
+    // sitting at the same address it always is.
+    val lastAddress: String? = null,
+    val lastPort: Int? = null,
 ) {
     val isValid: Boolean
         get() = deviceId.isNotEmpty() && Sas.isPlausiblePublicKey(publicKey)
@@ -59,12 +67,22 @@ data class PairedDevice(
  * Stored in the app's private data directory (not shared preferences and
  * not external storage), so no other app can read or edit which keys this
  * device trusts.
+ *
+ * Every accessor is synchronised, because the backing list is genuinely
+ * reached from four threads at once: the UI, the link read loops, the
+ * connectivity callback that drives reconnects, and — via
+ * [com.mazeconnect.core.transport.PinnedTrustManager] — the TLS handshake
+ * itself. An unsynchronised ArrayList there is not a theoretical race: a
+ * reconnect writing `lastAddress` while a handshake iterates for the pin
+ * throws ConcurrentModificationException on a thread with no handler above
+ * it, which takes the whole process down.
  */
 class PairedDeviceStore(context: Context) {
 
     private val file = File(context.filesDir, FILE_NAME)
     private val devices = mutableListOf<PairedDevice>()
 
+    @Synchronized
     fun load(): Boolean {
         devices.clear()
         if (!file.exists()) return true // nothing paired yet is normal
@@ -89,6 +107,8 @@ class PairedDeviceStore(context: Context) {
                     publicKey = key,
                     pairedAtEpochSeconds = obj.optLong("pairedAt"),
                     enabledCapabilities = Capability.fromNames(capNames),
+                    lastAddress = obj.optString("lastAddress").takeIf { it.isNotEmpty() },
+                    lastPort = obj.optInt("lastPort", -1).takeIf { it in 1..65535 },
                 )
                 // A record we cannot fully validate is dropped rather than
                 // loaded half-trusted: a truncated key must never become a pin.
@@ -100,6 +120,7 @@ class PairedDeviceStore(context: Context) {
         }
     }
 
+    @Synchronized
     fun save(): Boolean = try {
         val array = JSONArray()
         devices.forEach { device ->
@@ -114,6 +135,10 @@ class PairedDeviceStore(context: Context) {
                         "enabledCapabilities",
                         JSONArray(Capability.toNames(device.enabledCapabilities)),
                     )
+                    if (device.lastAddress != null && device.lastPort != null) {
+                        put("lastAddress", device.lastAddress)
+                        put("lastPort", device.lastPort)
+                    }
                 }
             )
         }
@@ -126,21 +151,25 @@ class PairedDeviceStore(context: Context) {
         false
     }
 
+    @Synchronized
     fun all(): List<PairedDevice> = devices.toList()
 
-    val count: Int get() = devices.size
+    val count: Int @Synchronized get() = devices.size
 
     /** Is this exact public key pinned? Compared in constant time. */
+    @Synchronized
     fun isTrusted(publicKey: ByteArray): Boolean {
         if (!Sas.isPlausiblePublicKey(publicKey)) return false
         return devices.any { Fingerprint.equals(it.publicKey, publicKey) }
     }
 
+    @Synchronized
     fun forKey(publicKey: ByteArray): PairedDevice? {
         if (!Sas.isPlausiblePublicKey(publicKey)) return null
         return devices.firstOrNull { Fingerprint.equals(it.publicKey, publicKey) }
     }
 
+    @Synchronized
     fun forId(deviceId: String): PairedDevice? = devices.firstOrNull { it.deviceId == deviceId }
 
     /**
@@ -151,6 +180,7 @@ class PairedDeviceStore(context: Context) {
      * real device — exactly the substitution pairing exists to prevent.
      * Re-pairing requires an explicit [remove] first.
      */
+    @Synchronized
     fun add(device: PairedDevice): Boolean {
         if (!device.isValid) return false
         if (devices.any { Fingerprint.equals(it.publicKey, device.publicKey) }) return false
@@ -160,6 +190,7 @@ class PairedDeviceStore(context: Context) {
     }
 
     /** Updates mutable metadata only. Never changes the pinned key itself. */
+    @Synchronized
     fun update(publicKey: ByteArray, deviceName: String, capabilities: Set<Capability>): Boolean {
         val index = devices.indexOfFirst { Fingerprint.equals(it.publicKey, publicKey) }
         if (index < 0) return false
@@ -170,11 +201,29 @@ class PairedDeviceStore(context: Context) {
         return save()
     }
 
+    /**
+     * Remember where a reconnect just succeeded. Metadata only — never
+     * touches the pinned key, never validates anything, and a miss (device
+     * unpaired meanwhile) is silently ignored rather than treated as an
+     * error worth surfacing.
+     */
+    @Synchronized
+    fun updateLastAddress(deviceId: String, address: String, port: Int): Boolean {
+        val index = devices.indexOfFirst { it.deviceId == deviceId }
+        if (index < 0) return false
+        val current = devices[index]
+        if (current.lastAddress == address && current.lastPort == port) return true
+        devices[index] = current.copy(lastAddress = address, lastPort = port)
+        return save()
+    }
+
+    @Synchronized
     fun remove(publicKey: ByteArray): Boolean {
         val removed = devices.removeAll { Fingerprint.equals(it.publicKey, publicKey) }
         return if (removed) save() else false
     }
 
+    @Synchronized
     fun clear() {
         devices.clear()
         save()

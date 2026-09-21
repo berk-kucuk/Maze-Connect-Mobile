@@ -361,3 +361,1006 @@ bilgisayar uygulama içi seçimde de otomatik öne geliyor.
 
 Sürüm 0.10.0 / versionCode 11. `:core:testDebugUnitTest` ve
 `:app:lintDebug` temiz. (Desktop bu turda değişmedi.)
+
+
+---
+
+## 0.10.1 — reconnect butonu tepki vermiyordu
+
+Bildirilen hata: Reconnect butonuna dokununca hiçbir şey olmuyor, ~2 dakika
+bağlantı kesildikten sonra kendiliğinden de kolay kolay geri gelmiyor.
+Firewall kontrol edildi — `maze-connect` firewalld servisi zaten aktif
+zonda TCP+UDP 38271 için açık, sorun orada değildi.
+
+Kök sebep: `reconnectPairedDevices()` sadece o an UDP keşif beacon'ının
+gördüğü (`beacon.devices`) cihazlara bağlanmayı deniyordu. Masaüstü 5
+saniyede bir duyuru gönderse de, telefon arka plana düşüp bir süre
+beklediğinde (Doze/arka plan kısıtlamaları, kaçırılan bir multicast
+paketi) bu liste boşalabiliyor — ve boşsa denenecek adres kalmıyor.
+Reconnect butonu da aynı fonksiyonu çağırdığı için "hiçbir şey
+yapmıyormuş" gibi görünüyordu; aslında çalışıyordu, sadece elinde deneyecek
+bir adres yoktu.
+
+**Düzeltme: `PairedDevice`'a `lastAddress`/`lastPort` eklendi**
+(`paired-devices.json`'da kalıcı), her başarılı bağlantıda güncelleniyor.
+`reconnectPairedDevices()` artık beacon'da görünmeyen ama daha önce
+bağlanılmış cihazlar için de bu son adrese doğrudan bağlanmayı deniyor —
+mutual-TLS + pin kontrolü değişmeden çalışıyor, adres sadece "nereyi
+deneyeyim" ipucu. `forceReconnect()` (Reconnect butonu) artık önce
+beacon'ın multicast soketini yeniden bağlıyor (`beacon.refresh()`, arka
+planda askıda kalmış olabilir), sonra hem beacon hem son-bilinen-adres
+üzerinden dener — böylece her tıklama gerçek bir etki üretiyor. Aynı
+mantık otomatik 10 saniyelik arka plan reconnect döngüsünü de kapsadığı
+için "2 dakika sonra kolay kolay bağlanmıyor" sorunu da bununla düzeldi.
+
+Sürüm 0.10.1 / versionCode 12. `:core:testDebugUnitTest` ve
+`:app:lintDebug` temiz. (Desktop bu turda değişmedi.)
+
+---
+
+## 0.10.2 — arka planda kendiliğinden çöküyor, sonra bağlanamıyor
+
+Bildirilen hata: Uygulama arka plandayken kendi kendine çöküyor, ardından
+masaüstü ile bağlantı kurulamıyor. İkisi tek bir hata değil — dördü de
+aynı sonuca çıkan ayrı kusurlar; ama "bağlanamıyor" kısmı bunların
+türevi: telefon işlem (process) olarak ölünce hem dinleyici soket hem
+beacon gidiyor, ve **çağıran taraf her zaman telefon** (bkz.
+`DeviceManager.cpp`'deki "a phone always dials the computer"), dolayısıyla
+masaüstünün geri arayacak bir yolu yok. Çökme durduğunda bağlantı sorunu
+da duruyor.
+
+**1. `dataSync` ön plan servisi zamanlayıcısı — asıl sebep.** Android 15'ten
+itibaren `dataSync` tipi bir foreground service 24 saat içinde toplam
+**6 saatle** sınırlı. Süre dolunca sistem `Service.onTimeout()` çağırıyor
+ve servis birkaç saniye içinde durmazsa işlemi öldürüyor ("a foreground
+service of type dataSync did not stop within its timeout"). Bizde
+`onTimeout()` override'ı hiç yoktu ve servisin işi zaten kalıcı olarak
+açık kalmak — yani bu bir sınır değil, **zamanlanmış çökme**. Ekran kapalı
+olduğu için de "kendiliğinden arka planda çöktü" diye görünüyor.
+Düzeltme: servis tipi `connectedDevice` oldu (zamanlayıcısı yok,
+yaptığımız işin dürüst tarifi de bu; ön koşul izni olan
+`CHANGE_WIFI_MULTICAST_STATE` zaten vardı, **yeni izin gerekmedi**), ve
+ileride bu tipe de saat konursa öldürülmek yerine düzgün dursun diye
+`onTimeout()`'un her iki aşırı yüklemesi de override edildi.
+
+**2. `Beacon` içindeki HashMap yarışı.** `onNetworkAvailable()`,
+ConnectivityManager'ın kendi binder thread'inde çalışıyordu ve oradan
+`beacon.refresh()` → `stop()` → `seen.clear()` yapıyordu — tam o sırada IO
+thread'indeki `listenLoop()` aynı düz HashMap üzerinde
+`pruneAndPublish()` çalıştırıyor. Sonuç: çıplak bir `scope.launch`
+içinde `ConcurrentModificationException`, yani yakalanmamış istisna, yani
+işlemin ölümü. Ve tetikleyicisi tam olarak "arka plandayken Wi-Fi
+değişti". Düzeltme: `Beacon`'ın bütün değişken durumu tek bir kilit
+altına alındı, her `listenLoop` kendi soketini parametre olarak alıyor
+(eski nesil döngü yeni nesle yazamıyor), `onNetworkAvailable()` artık
+manager'ın kendi scope'una devrediliyor. Bu arada `lastAccepted`
+tablosu da artık budanıyor — günlerce açık kalan bir serviste sınırsız
+büyüyordu.
+
+**3. `Connection.readLoop()` sadece `IOException` yakalıyordu.** Bu döngü
+`drainFrames()` üzerinden doğrudan `DeviceManager`'ın mesaj
+işleyicilerine giriyor; oradan çıkacak bir `NumberFormatException`,
+`IndexOutOfBoundsException` veya NPE `IOException` değil — yakalanmıyor,
+`scope.launch` içinden kaçıyor ve uygulamayı düşürüyor. Düzeltme:
+`Exception` yakalanıyor (`CancellationException` yeniden fırlatılıyor,
+yapısal eşzamanlılık bozulmasın diye); bir işleyici hata verirse bedelini
+**o link** ödüyor — kapanıyor, `onClosed` çalışıyor, reconnect süpürmesi
+yeniden arıyor. Ölü işlem yerine toparlanabilir bir kopma.
+
+**4. `PairedDeviceStore` senkronize değildi.** Listeye dört yerden
+erişiliyor: UI, link okuma döngüleri, reconnect'i süren connectivity
+callback'i ve — `PinnedTrustManager` üzerinden — **TLS el sıkışmasının
+kendisi**. Bir reconnect `lastAddress` yazarken bir el sıkışması pin için
+listeyi dolaşırsa `ConcurrentModificationException`, üstünde hiçbir
+handler olmayan bir thread'de. Bütün erişimciler `@Synchronized` yapıldı.
+
+Ayrıca son bir emniyet kemeri: `Link`'in scope'una bir
+`CoroutineExceptionHandler` eklendi. `SupervisorJob` kardeş coroutine'leri
+korur ama istisnayı yutmaz — handler yokken yakalanmamış her fırlatma
+varsayılan handler'a, yani işlemin ölümüne gidiyordu. Artık loglanıyor.
+
+Sürüm 0.10.2 / versionCode 13. `:core:testDebugUnitTest` ve `:app:lintDebug`
+temiz (68 uyarı, hepsi bu turdan önce de vardı). `:app:assembleRelease` v3
+imzalı APK üretti; birleşmiş manifestte `foregroundServiceType=0x10`
+(CONNECTED_DEVICE) ve `FOREGROUND_SERVICE_DATA_SYNC` izninin kalkmış olduğu
+doğrulandı. (Desktop bu turda değişmedi.)
+
+Bu tur build ortamı da sıfırdan kuruldu: JDK 21 (`jdk21-openjdk`) + Android
+SDK command-line tools `~/Android/Sdk` altına. Dikkat: platform paketleri
+artık minör sürümlü — `platforms;android-37` diye bir paket **yok**,
+`platforms;android-37.0` var. `compileSdk = 37` bunu doğru çözüyor.
+
+
+---
+
+## 0.10.3 — telefon masaüstünü göremiyor (multicast tek arayüze join)
+
+Bildirilen hata: Masaüstü telefonu görüyor, telefon masaüstünü
+**eşleştirilebilir olarak göremiyor**. Reconnect butonu tepki vermiyor.
+Firewall kapatıldı, değişmedi.
+
+Ölçüm: masaüstünde 12 saniye multicast dinlendi — hem `msi` (192.168.0.45,
+port 38271) hem `SM-S918B` (192.168.0.28, port 45005) duyuruları geliyor.
+Yani telefon **gönderiyor** ve keşif ağ katmanında çalışıyor. Aynı anda
+masaüstünde 20 saniye boyunca 38271'e **tek bir TCP bağlantı denemesi
+gelmedi**. Telefon hiç aramıyordu, çünkü arayacak bir cihaz bilmiyordu.
+
+Kök sebep: `Beacon.start()` grubu deprecated tek argümanlı
+`joinGroup(InetAddress)` ile join ediyordu. Bu, arayüz seçimini çekirdeğe
+bırakıyor ve Android'de o seçim düzenli olarak Wi-Fi olmuyor — telefonda
+aynı anda birkaç arayüz açık (wlan0, rmnet, VPN tun) ve multicast
+varsayılanı LAN'ı taşıyan arayüz değil. Ortaya çıkan arıza **asimetrik**,
+o yüzden okuması kafa karıştırıcı: giden datagram normal route'u izlediği
+için **gönderme çalışmaya devam ediyor** (masaüstü telefonu görüyor ve
+listeliyor), ama telefon hiçbir şey almıyor ve listesi boş kalıyor.
+Bildirilen tablonun tam şekli bu.
+
+Düzeltme: `joinGroupOnEveryInterface()` — masaüstünün ilk günden beri
+yaptığının aynısı (`Beacon.cpp`, `QNetworkInterface::allInterfaces()`
+döngüsü). Her up, non-loopback, IPv4 adresi olan arayüzde
+`joinGroup(SocketAddress, NetworkInterface)` deneniyor.
+`supportsMulticast()` bilerek filtre olarak **kullanılmıyor**: Android bunu
+cihaz/üretici bazında tutarsız raporluyor ve oradaki bir false negative tam
+da önemli olan arayüzü sessizce atlardı. Hiçbiri tutmazsa eski tek arayüzlü
+join'e düşüyor, yani hiçbir durumda öncekinden kötü olamaz.
+
+**Scan butonu (istendi, iki platformda da).** Keşif pasif olduğu için boş
+bir liste iki ayrı şeyi aynı anda gösteriyor: ortada bir şey yok, ya da biz
+dinlemeyi bıraktık. Kullanıcının ikincisine müdahale etme yolu yoktu.
+- Mobil: `DeviceManager.rescan()` → beacon yeniden bağlanıyor (tüm
+  arayüzlere yeniden join), anında bir duyuru gidiyor, eşleşmiş cihazlar
+  yeniden aranıyor. `DevicesScreen` başlığında "Scan", boş durumda
+  "Scan again".
+- Masaüstü: `Beacon::refresh()` (bir multicast üyeliği join edildiği
+  arayüze aittir — sonradan kablo takmak, VPN bağlamak veya yeni adres
+  almak o arayüzde grubu join etmiş yapmaz; yeniden başlatmak tek güvenilir
+  çözüm), `DeviceManager::rescan()`, `Backend::rescanDevices()`, ve
+  `DevicesView`'a gerçek bir başlık satırı + "Scan" butonu.
+
+Sürüm 0.10.3 / versionCode 14. Mobil: `:core:testDebugUnitTest`,
+`:app:lintDebug`, `:app:assembleRelease` temiz.
+
+**Masaüstü bu turda derlenmedi**: `cmake` ve `ninja` sistemde yok
+(`build/CMakeCache.txt` ninja ile yapılandırılmış ama `/usr/bin/ninja`
+silinmiş). `sudo pacman -S cmake ninja` sonrası derlenmeli.
+
+
+---
+
+## 0.10.4 — butonlar basılmış gibi görünmüyor, masaüstünden Pair cevapsız
+
+Bildirilen: (a) mobilde butonlara basınca hiçbir tepki yok, basılmıyor gibi
+duruyor; (b) masaüstünden Pair'e basınca telefon cevap vermiyor.
+
+**(a) İkincil butonların hiçbir basılı hâli yoktu.** `MazeButton`'da
+`primary = false` iken `fill` basılıyken de basılı değilken de
+`Transparent`, yazı rengi de `if (primary && !pressed)` yüzünden sabit
+`Paper`. Yani ikincil bir butona basmak sıfır görsel değişim üretiyordu —
+ve uygulamadaki her düşük vurgulu eylem ikincil: **Reconnect, Remove,
+Scan, Clear, Cancel, Decline, Codes differ**. Butonlar doğru çalışırken
+bile ölü hissettirmesinin sebebi buydu; ilk turdaki "reconnect butonu
+tepki vermiyor" şikâyetinin görsel yarısı da bu.
+
+Düzeltme: ikincil buton basılıyken dolu `Paper` yanıyor (kenarlığı da
+`Paper` oluyor, yoksa parlak bloğun etrafında sönük bir çerçeve kalıyor),
+birincil eskisi gibi içi boşalarak tersine dönüyor. Birincil zaten durağan
+hâlde beyaz, dolayısıyla onu beyaz yakmak basma olarak okunamayacak tek
+şey olurdu. Ayrıca geçiş **girişte anlık** (`snap()`), çıkışta
+`tween(140)`: bir dokunuş çoğu zaman animasyondan kısa sürüyor, basılı
+hâle *yumuşayarak* girmek hızlı dokunuşta geçişi başlatıp görünür olmadan
+geri döndürüyordu — geri bildirim yalnızca basılı tutanlara ulaşıyordu.
+
+**(b) `_pendingPairing` link kapanınca temizlenmiyordu.** `onClosed`,
+`forgetPendingWork()` ile status/commands/ai/guard'ı temizliyordu ama bunu
+değil. `_pendingPairing` "aynı anda tek eşleştirme" kuralıyla korunan tek
+bir slot: `requestPairingAt()` doluyken baştan dönüyor, `handlePairResponse()`
+her cevabı ona göre ölçüyor. El sıkışma yarıda kalan bir link — kullanıcı
+dialogu görmedi çünkü uygulama arka plandaydı, bilgisayar vazgeçti, ağ
+takıldı — slotu kalıcı olarak dolu bırakıyor ve **telefon o andan sonra
+hiçbir şeyle eşleşemiyor**, süreç yeniden başlayana kadar. Artık kapanan
+link o eşleştirmenin sahibiyse slot boşaltılıyor.
+
+**(b devamı) Gelen eşleştirme isteği arka planda görünmezdi.** Doğrulama
+dialogu bir Activity'de yaşıyor, dolayısıyla telefon kilitliyken veya
+uygulama arka plandayken masaüstü "asking that device to pair" derken bu
+tarafta hiçbir şey olmuyordu. Yeni `DeviceEvent.PairingRequested` →
+`MazeConnectService` yüksek öncelikli bir bildirim atıyor (kanal:
+"Pairing requests"), dokununca uygulama açılıyor. **Kod bilerek bildirimde
+yok**: SAS'ı bildirim gölgesinden karşılaştırmak, onu anlamlı kılan
+bağlamdan kopararak karşılaştırmaktır. Eşleştirme bitince (kabul, ret veya
+hata) bildirim geri çekiliyor.
+
+**POST_NOTIFICATIONS hiç istenmiyordu.** İzin manifestte baştan beri
+vardı ama API 33'ten itibaren manifest tek başına hiçbir şey vermiyor:
+kullanıcıya sorulmadığı sürece uygulamanın attığı **her** bildirim sessizce
+düşüyor. Bu, ön plan servisi bildirimini de kapsıyordu — yani "bu uygulama
+bir link tutuyor" ifşasını. `MainActivity.onCreate()` artık bir kez soruyor.
+Cevaba hiçbir şey bağlı değil: ret, kullanıcıya yalnızca bildirimlere mal
+oluyor, link/widget/dialog aynen çalışıyor.
+
+Sürüm 0.10.4 / versionCode 15. `:core:testDebugUnitTest`, `:app:lintDebug`
+(68 uyarı, hepsi önceden vardı), `:app:assembleRelease` temiz.
+
+
+---
+
+## 0.10.5 — telefona gelen hiçbir bağlantı hiçbir zaman çalışmamış
+
+Bildirilen: masaüstünden Pair'e basınca telefon tepki vermiyor, kod bile
+gelmiyor. 0.10.4 ile de sürüyor.
+
+Bu tur tahminle değil, ölçümle çözüldü. Protokolü konuşan bir tanı
+istemcisi yazıldı (`scratchpad/pairprobe.py`): beacon'dan telefonu bulup
+istemci sertifikasıyla TLS 1.3 kuruyor, `hello` ve `pairRequest`
+gönderiyor, dönen çerçeveleri basıyor. Sonuç:
+
+    TLS: TLSv1.3 TLS_AES_256_GCM_SHA384
+    telefon sertifikasi: 291 bayt
+    >> hello gonderildi
+    >> pairRequest gonderildi
+    << 20 sn icinde baska bir sey gelmedi
+
+Telefon el sıkışmayı tamamlıyor, sonra **hiçbir şey** göndermiyor —
+`adopt()`'un koşulsuz yolladığı hello dahil — ve bağlantıyı kapatmıyor.
+
+Kök sebep, `acceptLoop()`'ta iki satır arası bir uyumsuzluk:
+
+    // startListener()
+    val (context, _) = tls.createContext(allowUnpaired = true)
+    val server = context.serverSocketFactory.createServerSocket(0)
+
+    // acceptLoop()
+    val (_, trustManager) = tls.createContext(allowUnpaired = true)
+    socket.startHandshake()
+    adopt(Connection(socket, trustManager, scope))
+
+Bir `SSLServerSocket` tek bir `SSLContext`'ten üretilir ve kabul ettiği
+her soket **o** context'in trust manager'ıyla el sıkışır. Yani el sıkışma
+`startListener()`'daki (referansı `_` ile atılan) manager'dan geçiyor;
+`acceptLoop()`'ta yaratılıp `Connection`'a verilen manager hiçbir el
+sıkışmaya katılmıyor ve `peerPublicKey`'i sonsuza dek null kalıyor.
+`adopt()` da ilk satırında `?: return false` ile çıkıyor — handler
+takmadan, `connection.start()` çağırmadan, soketi kapatmadan, tek satır
+log basmadan.
+
+Yani telefona **gelen** her bağlantı, protokolün ilk baytından önce
+sessizce ölüyordu. Telefonun kendi aradığı yön çalışıyordu, çünkü o yol
+`tls.connect()` kullanıyor ve el sıkışmayı gerçekten yapan manager'ı geri
+veriyor — masaüstü logunda 17:27'de telefonun *başlatıcı* olduğu
+eşleştirmenin doğrulama kodu aşamasına kadar ilerlemesinin sebebi buydu.
+
+Düzeltme: `PinnedTrustManager.adoptCompletedHandshake(chain)`. Kabul yolu,
+tamamlanmış oturumun zincirini (`SSLSession.getPeerCertificates()`, ki
+platform bunu ancak karşı taraf o anahtarın sahibi olduğunu kanıtladıktan
+sonra doldurur) aynı `check()`'ten geçiriyor: aynı yalnızca-EC kuralı,
+aynı makullük testi, aynı pin kararı. Canlı el sıkışmada kabul edilmeyecek
+hiçbir şey burada da kabul edilmiyor. Zincir kullanılamazsa soket
+kapatılıp geçiliyor. Ayrıca `adopt()`'un `false` dönüşü artık loglanıyor
+ve kabul yolunda soketi kapatıyor — bu sınıf hatanın tamamen görünmez
+olması, bulunmasını günler geciktiren asıl şeydi.
+
+Sürüm 0.10.5 / versionCode 16. `:core:testDebugUnitTest`, `:app:lintDebug`,
+`:app:assembleRelease` temiz. Cihaza kurulup `pairprobe.py` ile
+doğrulanmayı bekliyor.
+
+
+---
+
+## 0.10.6 — Dashboard refresh butonu, ve Reconnect'in üçüncü sebebi
+
+**`outboundPending` sızıyordu.** `connectToPaired()` kümeden silmeyi iki
+"iyi" yolda yapıyordu: bağlantı kurulamazsa, ve `adopt()` dönerse. Başka
+her çıkış — `adopt()` fırlatması, scope'un connect ile devir arasında
+iptal edilmesi — kaydı geride bırakıyordu. Bu küçük bir sızıntı değil:
+`reconnectPairedDevices()` kümede olan cihazı atlıyor, dolayısıyla o
+bilgisayar **süreç ömrü boyunca bir daha hiç aranmıyor** ve
+`forceReconnect()` (Reconnect butonu) `true` dönerek hiçbir şey yapmıyor.
+Artık `finally` bloğunda.
+
+Bu, bu turdaki üçüncü aynı-sınıf hata — `_pendingPairing` (0.10.4),
+`m_pendingPairings` (masaüstü 1.0.2) ve şimdi bu. Üçü de "aynı anda tek X"
+kuralını koruyan bir küme/slot ve üçü de hata yolunda temizlenmiyordu.
+Yeni bir koruma kümesi eklenirken temizliğin `finally`'ye yazılması
+kural olarak alınmalı.
+
+**Dashboard'a Refresh butonu.** Ekran zaten üç saniyede bir yeniliyor ama
+yalnızca `target` varken, ve `target` cihazın bağlı olmasını şart koşuyor.
+Yani bayat bir panel, tanımı gereği yoklamanın dokunmadığı paneldir —
+düz bir `requestStatus()` orada hiçbir şey yapmazdı. `refreshDashboard()`
+bu yüzden `requestStatus()`'un dönüş değerini sinyal olarak kullanıyor:
+`false` (link yok veya yetenek kapalı) ise `rescan()`'e düşüyor. Buton
+tam ihtiyaç duyulan anda çalışıyor, o an olmadığı anda değil.
+
+Sürüm 0.10.6 / versionCode 17. `:core:testDebugUnitTest`,
+`:app:lintDebug`, `:app:assembleRelease` temiz.
+
+
+---
+
+## 0.10.7 — güncelleme hatırlatıcısı
+
+İstenen: sitede daha yeni bir sürüm varsa uygulama haber versin.
+
+`UpdateChecker` (yeni bağımlılık yok — `HttpsURLConnection`) günde en fazla
+bir kez `https://mazelinux.berkkucukk.com.tr/maze-connect-apk/latest.json`
+okuyor. Settings'e "Version" bölümü geldi: kurulu sürüm, durum satırı,
+"Check now", aç/kapa, ve daha yenisi varsa "Download". Yeni bir sürüm için
+düşük öncelikli **tek** bildirim atılıyor (`notifiedVersionCode` ile) —
+kullanıcının kurmamaya karar verdiği bir sürüm için her gün dönen şey
+hatırlatma değil, dırdırdır; Settings satırı tekrar bakmak isteyene zaten
+duruyor.
+
+**Yayındaki dosyanın şeması korundu.** Site şu an şunu veriyor:
+
+    { "file": "maze-connect-0.10.2.apk", "version": "0.10.2" }
+
+Parser bunu olduğu gibi kabul ediyor; `versionCode`/`versionName`/`url`
+varsa onları tercih ediyor. `versionCode` en kesin olan, çünkü Android'in
+kurulumları sıraladığı sayı o. `file`, manifest'in kendi dizinine göre
+çözülüyor — hem yayındaki dosyanın anlamı bu, hem de bu yüzden host dışına
+işaret edemiyor: taban `MANIFEST_URL`.
+
+`versionCode` yokken isimler **sayısal olarak** karşılaştırılıyor, ve bunun
+kendi testi var (`UpdateVersionTest`, 4 test). Metin karşılaştırması tam
+işe yaramaya başladığı anda yanlış cevap veriyor: "0.10.10" metin olarak
+"0.10.2"nin altında sıralanır, yani 0.10.9'daki bir telefona sonsuza dek
+"günceldesin" denirdi.
+
+Güvenlik tarafı: istek hiçbir tanımlayıcı taşımıyor (query yok, header yok,
+cihaz id yok), gövde 8 KB'de kesiliyor, her alan sınırlı ve kontrol
+karakterinden arındırılmış, yönlendirme takip edilmiyor, indirme linki
+yalnızca manifest'in kendi host'undaysa kabul ediliyor. En önemlisi:
+**hiçbir şey indirilmiyor ve kurulmuyor.** Ele geçirilmiş bir manifest'in
+yapabileceği en kötü şey yanlış bir sürüm numarası göstermek. İlk verilen
+adres `http://` ve LAN IP'siydi; onun için dar bir cleartext istisnası
+yazılmıştı, https adres gelince tamamen geri alındı —
+`cleartextTrafficPermitted="false"` mutlak kaldı.
+
+Sürüm 0.10.7 / versionCode 18. `:app:testDebugUnitTest` (4/4),
+`:core:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleRelease` temiz.
+
+
+---
+
+## 0.10.8 — manifest /api altına taşındı; açık User-Agent
+
+Sürüm bilgisi artık
+`https://mazelinux.berkkucukk.com.tr/api/maze-connect/latest` adresinde.
+Şema aynı (`file` + `version`), ama taşınma sessiz bir hata üretiyordu:
+`file` alanı **manifest'in kendi dizinine** göre çözülüyordu, ve manifest
+artık paketlerle aynı dizinde değil. Ölçüldü:
+
+    /api/maze-connect/maze-connect-0.10.7.apk   -> 404
+    /maze-connect-apk/maze-connect-0.10.7.apk   -> 206
+
+Yani Download butonu güvenilir biçimde hiçbir yere gitmeyecekti — ki bu
+butonun hiç olmamasından kötü. `DOWNLOAD_BASE_URL` ayrı bir sabit oldu.
+İkisi de aynı host'u adlandırmak zorunda, yoksa host kontrolü çözülen linki
+zaten atıyor.
+
+**Açık User-Agent.** Uç nokta beğenmediği user agent'lara 403 dönüyor —
+Python'unki bugün reddediliyor, `curl` ve Android'in varsayılan
+`Dalvik/…`'i kabul ediliyor. Varsayılana güvenmek, bir filtre kuralı
+değişikliğinin bu özelliği sessizce ve kalıcı olarak kapatması demek; iki
+tarafta da sebebini söyleyen hiçbir şey olmadan. Artık
+`MazeConnect/<versionName> (Android)` gönderiliyor: sunucu tarafında
+bilerek allowlist'e alınabilir bir ad.
+
+Yan faydası gizlilik: platformun varsayılan UA'sı telefonun **modelini ve
+build id'sini** taşıyor. Bunu bastırmak, giden isteği "uygulama ve sürümü"
+ile sınırlıyor. Settings'teki açıklama metni buna göre düzeltildi — eskisi
+"hiçbir tanımlayıcı gönderilmiyor" diyordu, artık gönderilen tek şeyin
+uygulamanın kendi sürümü olduğunu söylüyor.
+
+Canlı uçla doğrulandı: uygulamanın göndereceği isteğin birebir taklidi 200,
+çözülen indirme linki 206.
+
+Sürüm 0.10.8 / versionCode 19. `:app:testDebugUnitTest` (4/4),
+`:core:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleRelease` temiz.
+
+
+---
+
+## 0.11.0 — Live Update: bilgisayarın okumaları durum çubuğunda / Now Bar'da
+
+İstenen: One UI 8 "navbar"ında Maze Connect, bağlı cihaz ve CPU/RAM/GPU
+görünsün.
+
+**Önce bir düzeltme: navigation bar'a uygulama çizemez.** O şerit sisteme
+ait ve hiçbir Android sürümünde üçüncü taraf bir uygulamaya açılmıyor.
+Samsung'un Now Bar'ının (One UI 7+) gerçekte tükettiği şey Android'in
+**Live Updates** mekanizması: *promote edilmeyi isteyen* bir ongoing
+notification, ki platform bunu durum çubuğu çipine, kilit ekranına ve One
+UI'da Now Bar'a yansıtıyor. Yani oraya çıkmanın yolu iyi bir ongoing
+notification yayınlayıp istemek — bu bir **istek**, garanti değil.
+
+**API seviyeleri tahmin edilmedi, `api-versions.xml`'den okundu** (yanlışı
+gerçek telefonda `NoSuchMethodError` demek):
+
+    ProgressStyle                      API 36
+    Builder.setShortCriticalText       API 36
+    Builder.setRequestPromotedOngoing  API 36.1
+    MetricStyle / Metric               API 37.0
+
+Sonuç iki katmanlı, çünkü **One UI 8 = Android 16 = API 36**, yani hedef
+telefonda `MetricStyle` henüz yok:
+
+* **API 36 katmanı (bugün çalışan):** `ProgressStyle` — bilgisayarın adı,
+  çipte tek bir başlık sayısı (`setShortCriticalText`), ve bir gösterge
+  çubuğu. `setRequestPromotedOngoing` 36.1'den itibaren, `SDK_INT_FULL`
+  ile ayrıca korunuyor (`BAKLAVA_1` = 3_600_001).
+* **API 37 katmanı (kendiliğinden açılacak):** `MetricStyle` — CPU, bellek,
+  GPU yan yana, her biri kendi etiketi, birimi ve
+  `SEMANTIC_STYLE_SAFE/CAUTION/DANGER` rengiyle. Şimdiden yazıldı ki cihaz
+  oraya geldiğinde bu dosyaya dönmek gerekmesin.
+
+API 36 altında **hiç yayınlamıyor**. Promote edilemeyen ikinci bir kalıcı
+bildirim özellik değil, çöp olurdu; o zemini ana ekran widget'ları zaten
+kaplıyor.
+
+Veri kaynağı yeni trafik üretmiyor: `DeviceManager`'ın arka plan süpürmesi
+widget'lar için zaten her bağlı bilgisayardan yavaş bir snapshot istiyor,
+bu onu tüketiyor. Birden fazla bilgisayar bağlıysa **en taze** okuma
+gösteriliyor, makine başına ayrı bildirim değil — bir kişinin "bilgisayarım"
+dediği şey için gölgede iki kalıcı satır, ara sıra değişen tekinden kötü;
+başlık hangi makine olduğunu zaten yazıyor.
+
+Metrik anahtarı varsayılmıyor: `cpu` varsa başlık o oluyor, yoksa ilk
+metrik. Anahtarlar bilgisayarın kendi yardımcı programından geliyor ve bu
+uygulamanın onları varsayma hakkı yok.
+
+Kanal ayrı ve `IMPORTANCE_LOW`: sürekli güncelleniyor, asla ses çıkarmamalı,
+ve sistem ayarlarından kanalı kapatmak desteklenen vazgeçme yolu.
+
+Sürüm 0.11.0 / versionCode 20. `:app:testDebugUnitTest` (4/4),
+`:core:testDebugUnitTest`, `:app:assembleRelease` temiz; `:app:lintDebug`
+68 uyarı — bu turdan önceki taban da 68, yani **yeni bulgu yok** (ara
+derlemelerde çıkan `InlinedApi` ve `UseKtx` uyarıları düzeltildi:
+`semanticStyleFor` artık `@RequiresApi(37)`, SharedPreferences yazımları
+`edit {}`, `Uri.parse` yerine `toUri()`).
+
+**Cihazda doğrulanmadı** — bu makineye bağlı telefon yok. Promote edilip
+edilmediği ve Now Bar'da nasıl göründüğü gerçek bir One UI 8 cihazında
+görülmeli.
+
+
+---
+
+## 0.11.1 — Live Update promote edilmiyordu: eksik izin
+
+Bildirilen: 0.11.0 kuruldu, ne Now Bar'da ne de ayarlardaki uygulama
+listesinde görünüyor.
+
+Terminoloji önce netleşti: kastedilen **Now Bar** — kilit ekranının altında
+ortada duran, kilit açılınca bildirim panelinde görünen şerit. ("Now bar" /
+"nav bar" karışıyor.) Yani 0.11.0'daki mekanizma doğru yüzeyi hedefliyordu;
+Android 16 Live Updates, Now Bar'a girmenin tek yolu.
+
+Kök sebep: **`android.permission.POST_PROMOTED_NOTIFICATIONS` manifestte
+yoktu.** Resmi gereksinim listesine karşı kendi kodum tek tek denetlendi —
+stil (ProgressStyle/MetricStyle), `setOngoing`, `contentTitle`,
+`setRequestPromotedOngoing`, customContentView yok, grup özeti değil,
+colorized değil, kanal IMPORTANCE_MIN değil — hepsi doğruydu, yalnız bu
+izin eksikti. İzin olmadan platform promosyonu **sessizce** reddediyor:
+bildirim gölgede görünmeye devam ediyor, yani her şey çalışmış gibi
+duruyor, ama çip ve Now Bar boş kalıyor. Bildirilen tablonun tamamı bu.
+Normal izin, kurulumda veriliyor, kullanıcıya sorulacak bir şey yok.
+
+**Logo.** Küçük ikon, sistemin çipte ve kilit ekranında çizdiği şey,
+dolayısıyla artık uygulamanın kendi markası: `ic_notification`, launcher
+logosunun adaptive-icon güvenli alanından kırpılıp siluete indirgenmiş
+hâli (mdpi–xxxhdpi). Launcher varlığını doğrudan vermek olmazdı: adaptive
+foreground tasarımı gereği çoğunlukla boşluk — ölçüldü, 432px tuvalde logo
+237px, yani zaten küçücük bir alanın %55'i.
+
+Kalıcı bağlantı bildirimi de artık bunu kullanıyor;
+`stat_sys_data_bluetooth` takılıydı, ki bu uygulamanın Bluetooth ile hiçbir
+ilgisi yok.
+
+Sürüm 0.11.1 / versionCode 21. Testler ve release temiz; `:app:lintDebug`
+68 uyarı = taban, yeni bulgu yok.
+
+**Not:** eşleştirme bu turda çalışır hâlde doğrulandı — masaüstünün
+kaydında telefon `trusted=true` ve canlı bir TCP oturumu var. 0.10.5'teki
+trust manager düzeltmesi tuttu.
+
+**Ayrı bir kusur (düzeltilmedi):** masaüstü telefonu
+`deviceName="edc9c041-…"`, `deviceType=""` olarak pinlemiş. Önceki kayıtta
+`"SM-S918B"` / `"mobile"` vardı. Eşleştirme, hello'dan gelen ad/tip
+yerleşmeden tamamlanıyor ve sonradan güncellenmiyor; arayüzde cihaz adı
+yerine UUID görünüyor.
+
+
+---
+
+## 0.11.2 / 0.11.3 — Now Bar çalışıyor: eksik izin, yanlış koruma, kapatma anahtarı
+
+**0.11.2 — asıl hata bendeydi.** `setRequestPromotedOngoing` API **36.1**,
+36 değil; promosyon isteğinin tamamını `SDK_INT_FULL >= 3_600_001`
+koşulunun arkasına koymuştum. Android 16.0 (36.0) bir cihazda o satır hiç
+çalışmıyor, yani promosyon *hiç istenmiyor* — istenmeyen şey de
+reddedilmiyor, sessizce yok sayılıyor. One UI 8 Android 16 tabanlı, yani
+tam da bu durum. Setter'ın yaptığı tek şey extras'a bir boolean yazmak ve
+bir bundle anahtarı yazmanın kendi API kısıtı yok: anahtar artık API 36'dan
+itibaren doğrudan yazılıyor (`"android.requestPromotedOngoing"`, sabitin
+kendisi de 36.1 olduğu için literal), tipli setter varsa ayrıca çağrılıyor.
+
+Bundan önce 0.11.1'de eksik `POST_PROMOTED_NOTIFICATIONS` izni vardı; ikisi
+birlikte çözülünce Now Bar'da göründü.
+
+**0.11.3 — iki bildirilen eksik.**
+
+*Kapatma anahtarı.* Promote edilmiş kalıcı bir bildirim tasarımı gereği
+kaçınılmaz: link ayakta olduğu sürece kilit ekranında ve durum çubuğunda
+bir yer tutuyor. Kaçınılmaz olmayı seçen bir şeyin anahtarı olmak zorunda,
+ve sistemin kanal anahtarı yeterli cevap değil — o, bildirimi kapatırken
+uygulamanın *yayınlamaya* devam etmesi demek, ki bu daha kötü bir durum.
+Settings'e "Now bar" bölümü ve On/Off geldi. Anahtar **anında** etki
+ediyor: kapatınca hemen siliniyor, açınca elde duran en taze okumadan
+hemen yayınlanıyor. Arka plan süpürmesi dakikalık bir timer'da, ve yarım
+dakika hiçbir şey yapmıyormuş gibi duran bir anahtar bozuk anahtar diye
+okunur — bu seansın tekrar tekrar ürettiği şikâyetin ta kendisi.
+
+*Çip içeriği.* Now Bar sadece `"5%"` yazıyordu: neyin %5 olduğuna dair hiç
+ipucu yok, gerisi ancak bildirim açılınca görünüyor. `setShortCriticalText`
+artık başlık metriği + bir sonraki, ikisi de etiketli —
+`"CPU 5% · Memory 56%"`. Etiketli olması şart: çıplak bir "5%" bilginin
+küçük hâli değil, farklı ve işe yaramaz hâli. Platform durum çubuğu çipini
+96dp'de kesiyor, bu bilerek o sınırın hemen berisinde.
+
+Seçim mantığı (en taze okumayı yayınla) `LiveStatusNotification.refresh()`
+içinde tek yerde: servisin toplayıcısı ve ayarlardaki anahtar aynı cevabı
+vermek zorunda, yoksa iki bilgisayar bağlıyken anahtarı açıp kapatmak
+gölgedeki makineyi değiştirirdi — yalnız iki makineyle ortaya çıkan, yani
+testten sağ çıkan cinsten bir hata.
+
+Sürüm 0.11.3 / versionCode 23. Testler ve release temiz, lint 68 = taban.
+
+
+---
+
+## 0.11.4 — promosyon durumu okunuyor, çipe üç metrik
+
+**"Live notifications for all apps" atlatılamaz.** Bu bir sistem ayarı:
+işletim sisteminin üçüncü taraf promosyon isteklerini onurlandırıp
+onurlandırmayacağını belirliyor. Uygulama açabilseydi ayar olmazdı, ve
+açacak bir API yok. Samsung'un One UI 7 dönemindeki kendi Now Bar
+entegrasyonu iş ortağı listesine bağlı — yandan yüklenen kişisel bir
+uygulamaya kapalı.
+
+Yapılabilecek olan yapıldı: **durumu okuyup kullanıcıyı tek dokunuşla
+oraya götürmek.**
+
+`promotionState()` artık `getActiveNotifications()` ile sistemin bildirimi
+nasıl tuttuğunu geri okuyor — tahmin değil, sistemin kendi cevabı:
+
+    PROMOTED        FLAG_PROMOTED_ONGOING verilmiş, Now Bar'da
+    DECLINED        hasPromotableCharacteristics() true ama flag yok
+                    -> bildirim doğru, sistem reddediyor (One UI anahtarı)
+    NOT_PROMOTABLE  hasPromotableCharacteristics() false
+                    -> bildirim bozuk, bu uygulamanın hatası
+    NOT_PUBLISHED   ortada bildirim yok (bagli bilgisayar/veri yok)
+    DISABLED        Settings'teki anahtar kapalı
+
+Bu ayrımın olmaması bu turun asıl bedeliydi: "görünmüyor" üç sürüm boyunca
+"benim hatam" ile "sistem kapalı" arasında ayırt edilemedi. Artık ekran
+hangisi olduğunu söylüyor, ve `DECLINED` ise
+`Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS` ile doğrudan geliştirici
+seçeneklerine götüren bir buton çıkıyor. Kullanıcıya "geliştirici
+seçeneklerini aç, şu ayarı bul" demekle tek dokunuş arasındaki fark bu.
+Durum, ekran açıkken iki saniyede bir tazeleniyor, yani sistem ayarından
+dönünce yeni cevap görünüyor.
+
+**Çipte üç metrik.** `CHIP_METRICS` 2 → 3:
+`"CPU 5% · Memory 56% · GPU 12%"`. Boyutlandırma artık Now Bar'a göre;
+durum çubuğundaki dar çip fazlasını kesiyor ama baştaki okumayı yine
+gösteriyor, yani orada kaybedilen bir şey yok.
+
+Sürüm 0.11.4 / versionCode 24. Testler ve release temiz, lint 68 = taban.
+
+
+---
+
+## 0.11.5 — kilit ekranında sadece uygulama adı görünüyordu
+
+Bildirilen: telefon kilitliyken Now Bar'da "Maze Connect" yazıyor, hiçbir
+bilgi yok.
+
+Bildirimin görünürlüğü `VISIBILITY_PRIVATE` idi — belirtilmediğinde
+varsayılan bu, ve sistem kilit ekranında içeriği sansürleyip yalnızca
+uygulama adını bırakıyor. Bir mesajlaşma uygulaması için doğru varsayılan;
+burada ise özelliğin okunmak için var olduğu tek yerde söyleyeceği hiçbir
+şeyi söylememesi demekti. Kullanıcının kendi bilgisayarının yüzdesi gizli
+bilgi değil, ve kilidi açmadan okunabilmesi zaten amacın kendisi.
+
+`setVisibility(VISIBILITY_PUBLIC)` bildirime, `lockscreenVisibility` de
+kanala eklendi.
+
+**Kanal id'si bumplandı** (`maze-connect-live` -> `maze-connect-live-v2`),
+çünkü bir kanalın kilit ekranı görünürlüğü oluşturulurken sabitleniyor:
+`setLockscreenVisibility` kanal bir kez `createNotificationChannel`'a
+verildikten sonra yok sayılıyor. Eski kanalı olan bir kurulum, kod ne derse
+desin sansürlemeye devam ederdi. Eski kanal siliniyor, sistem listesinde
+ölü bir kayıt olarak kalmasın diye.
+
+Not: kullanıcı sistem genelinde "hassas içeriği gizle" seçtiyse bu yine de
+üste çıkar; orası uygulamanın kararı değil.
+
+Sürüm 0.11.5 / versionCode 25. Testler ve release temiz, lint 68 = taban.
+
+
+---
+
+## 0.11.6 — Now Bar bildirimi çok kısaydı
+
+Bildirilen: Spotify ve diğer Now Bar bildirimleri daha uzun; genişlik aynı
+ama Maze Connect'in yüksekliği yarısı kadar.
+
+Yükseklik doğrudan ayarlanamıyor — stil şablonu ve **içerik miktarı**
+belirliyor. Spotify'ınki `MediaStyle`: kapak görseli, iki metin satırı, bir
+arama çubuğu ve bir kontrol satırı. Bizimki `ProgressStyle` ile başlık, tek
+satır metin ve bir çubuktu. Yükseklik farkı doğrudan bunun sonucu.
+
+İki gerçek satır eklendi, ikisi de dolgu değil:
+
+**`setSubText` — kullanılmayan `detail` alanı.** `SystemStatus.Metric`'in
+dördüncü alanı (`"45 °C"`, `"17.5 / 31.3 GiB"`) bilgisayardan zaten
+geliyordu ve tamamen çöpe atılıyordu. "%43"ü bilinmeye değer bir şeye
+çeviren kısım o. Başlık metriğinin detayı artık başlık satırında.
+
+**Refresh aksiyonu.** Arka plan süpürmesi dakikalık bir timer'da;
+bu buton açık link üzerinden hemen taze okuma istiyor
+(`MazeConnectService.ACTION_REFRESH_STATUS`). Bir aksiyon satırı, başka
+türlü kazanılamayacak gerçek yükseklik — ama işlevi olduğu için ekleniyor,
+yükseklik için değil.
+
+Sonuç:
+
+    [ikon]  Maze Connect · 45 °C          7:13 PM
+            msi
+            CPU 9% · Memory 43% · Disk 5%
+            [========------------------------]
+            [ REFRESH ]
+
+Sürüm 0.11.6 / versionCode 26. Testler ve release temiz, lint 68 = taban.
+
+**Cihazda doğrulanmadı.** Bir sonraki kaldıraç, hâlâ kısa gelirse, stili
+çok satırlı bir şablona çevirmek — her metrik kendi satırında, detayıyla —
+ama bu ilerleme çubuğunu takas eder.
+
+
+---
+
+## 0.11.7 — Now Bar saatte 1200 kez yeniden çiziliyordu
+
+Bildirilen: Now Bar çok sık güncelleniyor, arka planda şarj yesin
+istemiyorum.
+
+Kök sebep, tahmin edilenden kötü: bildirimin hızı **verinin** hızına
+bağlıydı. Servisin toplayıcısı `systemStatus`'un her emisyonunda yeniden
+yayınlıyordu, ve emisyonu kim isterse o sürüyor — Dashboard açıkken
+`REFRESH_MS = 3_000`. Yani kimsenin bakmadığı bir yüzey dakikada yirmi kez
+yıkılıp yeniden kuruluyor, her seferinde sistem arayüzünü ve kilit ekranını
+uyandırıyordu.
+
+Bildirimin temposu veriden ayrıldı:
+
+* `MIN_REPOST_INTERVAL_MS = 120_000` — bir *bakış* yüzeyi için doğru olan
+  bu. Bir dakikalık arka plan süpürmesinden bilerek yavaş: yaygın arka plan
+  durumu iki okumada bir yeniden çizime oturuyor.
+* **Değişmeyen okuma hiç yayınlanmıyor.** İmza, bildirimin gerçekten çizdiği
+  şey (yuvarlanmış yüzdeler + detay dizeleri); aynıysa iş yapılmıyor. Boşta
+  bir makinede emisyonların çoğu bu.
+* `forceNextUpdate()` — Refresh aksiyonu cevabını aynı kısıtlı yoldan
+  aldığı için, açıkça isteyen kullanıcı kısıtın muhatabı olmasın diye.
+  Ayarlardaki anahtar da `force = true` ile geçiyor, açılışta anında
+  görünsün diye.
+
+Saatlik yeniden çizim:
+
+    uygulama acikken   1200  ->  30
+    arka planda          60  ->  30
+
+Sürüm 0.11.7 / versionCode 27. Testler ve release temiz, lint 68 = taban.
+
+
+---
+
+## 0.11.8 — Now Bar rengi: mavi varsayılan yerine yüke bağlı
+
+Bildirilen: küçük hâlin arka planı mavi, koyu gri olsa daha iyi; Spotify
+kapak fotoğrafına göre renk değiştirdiği gibi bizimki de CPU yüzdesine göre
+değişsin.
+
+Mavi olmasının sebebi `setColor()`'ın hiç çağrılmamasıydı — sistem kendi
+varsayılan vurgusunu koyuyordu. Bu uygulamada hiçbir anlamı olmayan ve
+hiçbir şeyle eşleşmeyen bir renk.
+
+Renk artık başlık okumasına (CPU) bağlı, **mevcut eşiklerle**:
+
+    < %75   #3F3F45  koyu gri
+    %75-90  #8A6A1F  kısık kehribar
+    >= %90  #8E2F2F  kısık kırmızı
+
+Sürekli bir gradyan yerine üç kademe, ve bu bilinçli. Her okumada tonu
+kayan bir şerit dekorasyondur: sürekli değişir, dolayısıyla hiçbir değişim
+bir şey ifade etmez. Üç kademe rengi bir *cevaba* çeviriyor — gri
+"bakılacak bir şey yok", diğer ikisi ikinci bir bakışı hak ediyor. Ayrıca
+`semanticStyleFor()` ile aynı sabitleri kullanıyor, yani API 37'de
+`MetricStyle`'ın kendi renkleriyle aynı hikâyeyi anlatıyor; aynı sayı
+hakkında iki yüzeyin farklı şey söylemesi ikisinden de kötü olurdu.
+
+Kısık tonlar, doygun değil: alarm bu uygulamanın kaldırdığı bir alarm gibi
+okunsun, sistem hatası gibi değil. Dinlenme hâli siyah değil gri, çünkü
+koyu bir gölge üzerinde tint olarak okunabilir kalması gerekiyor.
+
+`setColorized(true)` **kullanılamaz** — promosyon uygunluğunu doğrudan
+bozuyor. Yani bu bir vurgu; şeridin ne kadarını boyadığı sistemin kararı.
+
+Bu arada bir tutarsızlık düzeltildi: "hangi okuma başı çeker" mantığı
+`headlineIndexOf()` içinde tek bir yere alındı. Renk oradan hesaplanıyor,
+değişim tespiti imzası da aynı okumayı hash'lemek zorunda — iki yerde
+farklı seçmek, tam da gösterilmeye değer renk değişimlerini kısıtın
+yutmasına yol açardı, üstelik yalnızca CPU'yu ilk sırada bildirmeyen
+makinelerde.
+
+Sürüm 0.11.8 / versionCode 28. Testler ve release temiz, lint 68 = taban.
+
+
+---
+
+## 0.12.0 — widget ailesi: iki yeni boy, ve kayıp `detail` alanı
+
+İstenen: widget tasarımları görsel olarak daha iyi ve daha çok veri
+taşısın; A, C ve Compact ayrı widget'lar olsun, farklı boylarda başkaları
+da eklensin.
+
+Görsel bir işi göremediğim bir cihaza kör göndermek bu seansta birkaç tura
+mal olduğu için önce gerçek ölçekli bir maket üretildi
+(`scratchpad/mock/widgets.html`, 1dp = 2px, gerçek okumalarla) ve düzen
+seçildikten sonra yazıldı.
+
+**Veri katmanı: `detail` saklanmıyordu.** `WidgetSnapshotStore.save()`
+`metric.detail`'i (`"45 °C"`, `"17.5 / 31.3 GiB"`) düşürüyordu — bildirimde
+bulunan kaybın aynısı. Yani hiçbir widget, ne kadar yeri olursa olsun
+sıcaklığı gösteremezdi. Artık `key` ile birlikte saklanıyor (`key`, hangi
+okumanın başı çektiğini bilgisayarın görüntü dizesine bakmadan bilmek
+için). Eski dosyalar sorunsuz okunuyor: alan yoksa boş dize.
+
+Bu, sayımlar için bilinçli olarak saklanan isim ayrıntılarından farklı bir
+şey — yanındaki yüzdeyle aynı sınıfta bilgi, o yüzden gizlilik notu
+çiğnenmiyor.
+
+**İki yeni boy.**
+
+* `Detailed` (4×3): maketteki C. Metrik başına iki satır — etiket, değer ve
+  **tam** detay bir satırda, çubuk altında tam genişlikte. C'yi 4×2'de
+  denemek dört metriğin birini feda ettiriyordu; kendi boyunu verince
+  dördü de sığıyor, istatistik kutuları da duruyor.
+* `Tile` (2×2): dört uygulama ikonu kadar yerde iki okuma, detaylarıyla.
+  Yığılmış satır kullanıyor, çünkü bu genişlikte üç sütun çubuğu kendi
+  kenar boşluğundan ince bırakıyor.
+
+Aile artık: Mini 2×1, Tile 2×2, Compact 4×1, Dashboard 4×2, Detailed 4×3.
+
+**Uygulama detayı.** Yeni layoutlar mevcut id'leri **yeniden kullanıyor**.
+RemoteViews'un id çakışma sorunu tek bir layout ağacı içinde geçerli — ayrı
+layout dosyaları arasında değil — dolayısıyla `render()` hangi boyu
+doldurduğunu bilmeden hepsini dolduruyor. Tek ek, `hasDetail` bayrağı:
+geniş satır (etiket | çubuk | değer) 40dp'lik bir değerin yanında
+`"17.5 / 31.3 GiB"` taşıyamaz, o yüzden o boylar alanı hiç göstermiyor
+(kırpıp anlamsızlaştırmak yerine). Bilgisayar detay göndermezse görünüm
+boş bırakılmıyor, `GONE` yapılıyor: boş bir görünüm de satırını işgal eder
+ve sayı olması gereken yerde boşluk, sunulmamış bir okuma gibi değil,
+başarısız olmuş bir okuma gibi okunur.
+
+Çubuklar **beyaz bırakıldı**. Maketteki C yüke göre renklendirme
+gösteriyordu ama kod birkaç yerde "bu arayüzde vurgu rengi yok, palet katı
+monokrom" diyor; Now Bar'da renk kullanıldı çünkü orası sistemin yüzeyi ve
+renk oranın dili. Widget uygulamanın kendi yüzeyi, o karar sahibine
+bırakıldı.
+
+Sürüm 0.12.0 / versionCode 29. Testler ve release temiz. `:app:lintDebug`
+94 uyarı (taban 68): büyüyen tek iki kategori `SmallSp` (+19) ve
+`UnusedAttribute` (+6), ikisi de yeni layout dosyalarının kendisi — punto
+ölçeği mevcut layoutlarla aynı (widget_dashboard 8sp kullanıyor, yeniler
+9sp), yani yeni bir uyarı **türü** yok.
+
+**Cihazda görülmedi.** Beş sağlayıcının da APK'da kayıtlı olduğu
+doğrulandı; yerleşimlerin gerçek ekranda nasıl oturduğu görülmeli.
+
+
+---
+
+## 0.12.1 — widget'ların yarısı boştu
+
+Bildirilen: widget'lar gereksiz büyük, yarısı dolu yarısı boş.
+
+İki ayrı sebep vardı.
+
+**Kök `match_parent`, çocuklar `wrap_content`.** Kök, launcher'ın verdiği
+çerçeveyi dolduruyor ama `wrap_content` çocuklar tepede yığılıyor. Hücreleri
+bu içerikten uzun olan bir ana ekranda widget kendini üst yarıya çizip
+gerisini boş siyah bir levha bırakıyordu. Ölçer satırları artık
+`layout_weight` taşıyor, boşluğu aralarında paylaşıyorlar — hangi yükseklik
+verilirse verilsin kasıtlı görünüyor.
+
+**İlan edilen boyutlar içerikle uyuşmuyordu.** Ölçüldü:
+
+    Dashboard  icerik ~191dp, ilan 160dp  -> 185dp
+    Detailed   icerik ~215dp, ilan 250dp / 3 hucre  -> 210dp / 2 hucre
+    Tile       icerik ~138dp, ilan 110dp  -> 140dp
+
+`Detailed` üç hücre istiyordu ama içeriği `Dashboard`'ınkinden yalnızca %12
+fazla; hak etmediği bir hücreyi işgal ediyordu. Artık ikisi de 4×2 — aynı
+alanda iki farklı bilgi yoğunluğu, kullanıcı hangisini isterse.
+
+`NestedWeights` bilerek susturuldu, gerekçesi layout dosyalarının başında:
+mekanizma konusunda haklı (ağırlıklı satır + ağırlıklı çubuk = fazladan
+ölçüm geçişi), maliyet konusunda değil — bir düzine görünümlük bir ağaçta
+dört satır, en fazla iki dakikada bir yeniden çiziliyor, hiçbir kaydırma
+veya animasyon sırasında değil. Alternatifi, bu turda düzeltilen hatanın
+kendisi.
+
+Sürüm 0.12.1 / versionCode 30. Testler ve release temiz, lint 94 =
+0.12.0 tabanı (yeni tür yok).
+
+
+---
+
+## 0.12.2 — içeriği kısmadan boyutu küçültme
+
+Bildirilen: widget gereksiz büyük; içeriği azaltmadan boyutu küçülsün.
+
+**Boşluklar kısıldı, veri değil.** Dolgu 14 -> 10dp, ölçer satır aralığı
+10 -> 4dp (Detailed/Tile) ve 6 -> 3dp (Dashboard), çubuk üstü 4 -> 3dp,
+çubuk 6 -> 5dp, istatistik hücresi dolgusu 8 -> 6dp. Tek bir okuma, etiket
+veya detay kaldırılmadı.
+
+    Dashboard  191dp -> ~155dp   (-19%)
+    Detailed   215dp -> ~200dp   (-7%, ayrica 3 hucre -> 2 hucre)
+    Tile       138dp -> ~135dp
+
+**`minResizeWidth/Height` hiç tanımlı değildi** ve bu gerçek bir eksikti:
+tanımsızken bir widget'ın sürüklenerek küçültülebileceği en küçük boy
+`minWidth`/`minHeight`'ın kendisi oluyor. Yani hücreleri bu içerikten uzun
+olan bir ana ekran widget'a istediğinden fazla yer veriyor ve kullanıcıya
+onu geri alma yolu bırakmıyordu. Beş boyun hepsine, ölçülen içeriğin biraz
+altında bir zemin kondu.
+
+`minHeight` değerleri artık tahmin değil, yerleşmiş içeriğe karşı ölçülmüş.
+
+**Bu turda kendi yaptığım bir gerileme düzeltildi:** beş `widget_info`
+dosyasını baştan yazarken hepsine `@string/widget_description` koymuştum,
+`widget_mini_description` boşta kalmıştı (lint yakaladı). Her boy kendi
+açıklamasına döndü ve iki yeni boy kendi açıklamasını aldı — widget
+seçicisinde beş girdi varsa ayırt edilebilmeleri gerekiyor.
+
+Sürüm 0.12.2 / versionCode 31. Testler ve release temiz, lint 94 = 0.12.1
+tabanı.
+
+**Kurulumdan sonra widget'lar kaldırılıp yeniden eklenmeli:** hücre tahsisi
+yerleştirme anında yapılıyor, `targetCellHeight`/`minHeight` değişiklikleri
+yerinde duran bir widget'a uygulanmıyor.
+
+
+---
+
+## 0.12.3 — satır araları ve istatistik kutuları
+
+Bildirilen: hâlâ 4×3 devasa bir widget var, hiçbir şey değişmedi; aynı
+içerik 4×2'ye sığar, widget'ın içinde gereksiz boşluklar var.
+
+**4×3 iddiası paketten doğrulandı ve yanlış:** 0.12.2 APK'sında
+`detailed` `targetCellHeight=2`. Yayınlanan pakette 4×3 yok. Görülen ya
+eski sürüm ya da eski yerleşim — launcher hücre tahsisini yerleştirme
+anında donduruyor, yerinde duran widget yeni `targetCellHeight`'ı almıyor.
+Kurulu sürüm artık Settings > Version'da yazıyor, bu ayrım
+tahminle çözülmesin diye.
+
+**"Widget içinde gereksiz boşluk" kısmı ise doğruydu ve 0.12.1'de benim
+açtığım bir sorundu.** Alttaki boşluğu kapatmak için ölçer satırlarına
+ağırlık vermiştim; bu boşluğu yok etmiyor, **her satırın arasına**
+dağıtıyordu. Satırlar doğal yüksekliklerine döndü ve sıkı bir blok olarak
+duruyor; artan yer bir kez, kapsayıcı tarafından, ortalanarak soğuruluyor.
+`NestedWeights` susturmaları da bununla birlikte kalktı — artık gerekmiyor.
+
+**İstatistik kutuları yatay oldu.** Değer üstte etiket altta iki metin
+satırı ~41dp yiyordu; yan yana ~24dp. Üç ayrı kutu — tasarımın asıl
+önemsediği şey, katlanmış tek bir cümle yerine üç ayrı sayı — aynen duruyor.
+
+    Dashboard  155dp -> 135dp  (en kucuk 115dp)
+    Detailed   200dp -> 180dp  (en kucuk 155dp)
+
+İlk ölçümden bu yana Dashboard 191 -> 135dp (%29 daha kısa), Detailed
+215 -> 180dp (%16), ve Detailed bir hücre birden inmiş oldu. Tek bir okuma,
+etiket veya detay kaldırılmadı.
+
+Sürüm 0.12.3 / versionCode 32. Testler ve release temiz, lint 94 = taban.
+
+
+---
+
+## 0.12.4 — punto ve çubuk ölçeği büyütüldü
+
+Bildirilen: 4×2 boyut iyi ama içindeki çubuklar ve yazılar küçük kaldı;
+istenen sadece boyu kısmaktı, içerik aynı kalacaktı.
+
+Doğru bir eleştiri ve iki ayrı sebebi vardı. Boyu kısarken çubuk
+yüksekliğini de düşürmüştüm (Detailed/Tile 6 -> 5dp), ki bu içeriğin
+kendisi; ve yeni layoutların punto ölçeğini mevcut widget'lara bakarak
+temkinli seçmiştim — ama o mevcut ölçek zaten küçüktü.
+
+Ölçek bütün ailede yükseltildi:
+
+    etiketler    8/9/10sp -> 11/12sp
+    degerler     11/12sp  -> 14/15sp
+    baslik       14/15sp  -> 17sp
+    istatistik   13sp     -> 16sp
+    cubuklar     4/5dp    -> 6/7/8dp
+
+Hücre sayıları değişmedi — 4×2 doğru ayak iziydi, yanlış olan içine
+konandı. `minHeight` yeni içeriğe göre yeniden ölçüldü (Dashboard 165dp,
+Detailed 220dp, Tile 155dp) ki launcher içeriği sıkıştırmasın.
+
+Bunun nesnel bir doğrulaması da çıktı: `:app:lintDebug` 94 -> 50 uyarı, ve
+düşen tek kategori `SmallSp` ("yazı çok küçük"), 56 -> 12. Lint bunu
+baştan beri söylüyormuş; bu turdan önceki 37 tanesi de zaten oradaydı,
+yani küçük punto bu turda getirilen bir şey değil, devralınan bir şeydi.
+
+Sürüm 0.12.4 / versionCode 33. Testler ve release temiz.
+
+
+---
+
+## 0.12.5 — minHeight hücre sayısını belirliyor, içerik yüksekliği değil
+
+Bildirilen: widget'lar yine 4×3 oldu.
+
+Doğru, ve doğrudan 0.12.4'ün sebep olduğu bir gerileme. O turda punto
+büyütülürken `minHeight` de "ölçülen içerik yüksekliği" ile eşitlendi
+(Detailed 180 -> 220dp). Dikkatli olan davranış gibi görünüyor ve değil:
+launcher `minHeight`'ı hücre yüksekliğine bölüp **yukarı yuvarlıyor**, ve
+220dp iki hücre sınırını aşıp üçe taşıyor.
+
+`minHeight` bu widget'ın olabileceği **en küçük** boy; içeriğinin ne kadar
+uzun olduğu değil. İçerik ondan uzun olabilir — tahsis edilen hücreler
+zaten daha yüksek. Değerler 4×2 verdiği kanıtlanmış hallerine döndü
+(Dashboard 135dp, Detailed 170dp, Tile 130dp) ve **0.12.4'ün büyük puntosu
+ile çubukları aynen korundu** — onlar layout'ta yaşıyor, bu dosyada değil.
+
+Bu tuzak `detailed_widget_info.xml`'in başına yazıldı; iki tur üst üste
+buraya çarpıldı.
+
+Sürüm 0.12.5 / versionCode 34. APK'nın içinden doğrulandı: üç sağlayıcı da
+`targetCellHeight=2`.
+
+
+---
+
+## 0.12.6 / 0.12.7 — Dashboard 4×1, ve tepeye yapışan içerik
+
+**0.12.6:** Dashboard 4×2 -> 4×1. Yalnızca boşluk kesildi — kenar dolgusu
+10 -> 6dp, ölçer üst boşluğu 8 -> 4dp, satır arası 3 -> 1dp, istatistik üst
+boşluğu 6 -> 4dp, hücre iç dolgusu 6 -> 4dp; toplam ~24dp. Punto
+(11/12/13/16/17sp), 7dp çubuklar, dört ölçer ve üç istatistik kutusu aynen
+kaldı.
+
+**0.12.7 — 0.12.6'nın açtığı gerileme.** Aynı turda ölçer kapsayıcısının
+`layout_weight` + `gravity="center_vertical"`'ını da kaldırdım,
+gerekçem "tek hücrede zaten artan yer olmaz" idi. Yanlış: bir widget
+launcher'ın verdiği yüksekliği alır, o da tam sayıda hücredir ve bu
+içeriğin yüksekliğine neredeyse hiç eşit olmaz. Hücre bir **taban**, bir
+ölçü değil. Soğurucu olmayınca çocuklar tepeden dizildi ve altta koca bir
+siyah levha kaldı.
+
+Geri kondu, ve gerekçesi `widget_dashboard.xml`'in başına yazıldı —
+kaldırmak iki kez cazip geldi, ikisinde de aynı hatayla sonuçlandı.
+Ağırlıklı-ve-ortalanmış hâl satırları sıkı bir blok olarak tutuyor,
+istatistik kutularını alta sabitliyor, artan yeri alta ve üste bölüyor;
+yani hangi tahsis gelirse gelsin kasıtlı görünüyor — ve widget yerinde
+duran eski 4×2 tahsisiyle kalmış olsa bile doğru görünüyor.
+
+Aile: Mini 2×1, Compact 4×1, Dashboard 4×1, Tile 2×2, Detailed 4×2.
+
+Sürüm 0.12.7 / versionCode 36. Testler ve release temiz, lint 50.

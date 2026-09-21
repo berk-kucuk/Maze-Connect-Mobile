@@ -14,20 +14,29 @@
 
   No separate age line: at this height, hostname and two meters already
   fill it, and freshness matters far less than which two numbers this is.
+
+  The root wraps its content rather than filling the frame.
+
+  A widget is handed a whole number of cells, which is almost never the height
+  of this layout. With match_parent the background drawable painted all of it,
+  so the leftover showed up as a black band — the "empty space in the widget"
+  reported on every size. Arranging that slack (top, centred, spread between
+  rows) only moved the band around. wrap_content leaves the remainder
+  transparent instead, so the card ends where the content ends.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="8dp">
+    android:padding="12dp">
 
     <TextView
         android:id="@+id/widget_host"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="#F2F1EC"
-        android:textSize="11sp"
+        android:textSize="18sp"
         android:maxLines="1"
         android:ellipsize="end"
         android:text="@string/widget_no_computer" />
@@ -58,15 +67,15 @@
                 <TextView android:id="@+id/meter_label_1"
                     android:layout_width="0dp" android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                    android:textColor="#7A7A7F" android:textSize="14sp" android:maxLines="1" />
                 <TextView android:id="@+id/meter_value_1"
                     android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:textColor="#F2F1EC" android:textSize="9sp"
+                    android:textColor="#F2F1EC" android:textSize="14sp"
                     android:gravity="end" android:maxLines="1" />
             </LinearLayout>
             <ProgressBar android:id="@+id/meter_bar_1"
                 style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_width="match_parent" android:layout_height="12dp"
                 android:layout_marginTop="3dp"
                 android:max="100"
                 android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
@@ -81,15 +90,15 @@
                 <TextView android:id="@+id/meter_label_2"
                     android:layout_width="0dp" android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                    android:textColor="#7A7A7F" android:textSize="14sp" android:maxLines="1" />
                 <TextView android:id="@+id/meter_value_2"
                     android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:textColor="#F2F1EC" android:textSize="9sp"
+                    android:textColor="#F2F1EC" android:textSize="14sp"
                     android:gravity="end" android:maxLines="1" />
             </LinearLayout>
             <ProgressBar android:id="@+id/meter_bar_2"
                 style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_width="match_parent" android:layout_height="12dp"
                 android:layout_marginTop="3dp"
                 android:max="100"
                 android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
@@ -102,7 +111,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:textColor="#7A7A7F"
-        android:textSize="9sp"
+        android:textSize="14sp"
         android:maxLines="2"
         android:visibility="gone" />
 </LinearLayout>

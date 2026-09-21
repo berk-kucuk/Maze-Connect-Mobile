@@ -14,13 +14,22 @@
   One cell high. It was 4x2, which gave four short buttons a quarter of a
   screen and a great deal of empty space between them — the mark, the name and
   the state fit on one row, so that is what it takes.
+
+  The root wraps its content rather than filling the frame.
+
+  A widget is handed a whole number of cells, which is almost never the height
+  of this layout. With match_parent the background drawable painted all of it,
+  so the leftover showed up as a black band — the "empty space in the widget"
+  reported on every size. Arranging that slack (top, centred, spread between
+  rows) only moved the band around. wrap_content leaves the remainder
+  transparent instead, so the card ends where the content ends.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="10dp">
+    android:padding="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -32,7 +41,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="#F2F1EC"
-            android:textSize="11sp"
+            android:textSize="13sp"
             android:maxLines="1"
             android:ellipsize="end"
             android:text="@string/widget_no_computer" />
@@ -41,7 +50,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#7A7A7F"
-            android:textSize="10sp"
+            android:textSize="12sp"
             android:maxLines="1" />
     </LinearLayout>
 
@@ -57,76 +66,76 @@
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:layout_marginEnd="4dp"
-            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:paddingTop="9dp" android:paddingBottom="9dp"
             android:background="@drawable/widget_cell">
             <ImageView android:id="@+id/control_icon_1"
-                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_width="18dp" android:layout_height="24dp"
                 android:src="@drawable/ic_camera"
                 android:contentDescription="@null" />
             <TextView android:id="@+id/control_name_1"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
-                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+                android:textColor="#F2F1EC" android:textSize="12sp" android:maxLines="1" />
             <TextView android:id="@+id/control_state_1"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                android:textColor="#7A7A7F" android:textSize="11sp" android:maxLines="1" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/control_2"
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:layout_marginEnd="4dp"
-            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:paddingTop="9dp" android:paddingBottom="9dp"
             android:background="@drawable/widget_cell">
             <ImageView android:id="@+id/control_icon_2"
-                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_width="18dp" android:layout_height="24dp"
                 android:src="@drawable/ic_microphone"
                 android:contentDescription="@null" />
             <TextView android:id="@+id/control_name_2"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
-                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+                android:textColor="#F2F1EC" android:textSize="12sp" android:maxLines="1" />
             <TextView android:id="@+id/control_state_2"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                android:textColor="#7A7A7F" android:textSize="11sp" android:maxLines="1" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/control_3"
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:layout_marginEnd="4dp"
-            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:paddingTop="9dp" android:paddingBottom="9dp"
             android:background="@drawable/widget_cell">
             <ImageView android:id="@+id/control_icon_3"
-                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_width="18dp" android:layout_height="24dp"
                 android:src="@drawable/ic_wifi"
                 android:contentDescription="@null" />
             <TextView android:id="@+id/control_name_3"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
-                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+                android:textColor="#F2F1EC" android:textSize="12sp" android:maxLines="1" />
             <TextView android:id="@+id/control_state_3"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                android:textColor="#7A7A7F" android:textSize="11sp" android:maxLines="1" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/control_4"
             android:layout_width="0dp" android:layout_height="wrap_content"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center"
-            android:paddingTop="6dp" android:paddingBottom="6dp"
+            android:paddingTop="9dp" android:paddingBottom="9dp"
             android:background="@drawable/widget_cell">
             <ImageView android:id="@+id/control_icon_4"
-                android:layout_width="18dp" android:layout_height="18dp"
+                android:layout_width="18dp" android:layout_height="24dp"
                 android:src="@drawable/ic_bluetooth"
                 android:contentDescription="@null" />
             <TextView android:id="@+id/control_name_4"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
-                android:textColor="#F2F1EC" android:textSize="10sp" android:maxLines="1" />
+                android:textColor="#F2F1EC" android:textSize="12sp" android:maxLines="1" />
             <TextView android:id="@+id/control_state_4"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="9sp" android:maxLines="1" />
+                android:textColor="#7A7A7F" android:textSize="11sp" android:maxLines="1" />
         </LinearLayout>
     </LinearLayout>
 
@@ -136,6 +145,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:textColor="#7A7A7F"
-        android:textSize="10sp"
+        android:textSize="12sp"
         android:visibility="gone" />
 </LinearLayout>

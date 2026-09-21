@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 2x1: the smallest size — hostname and two meters.
-     See dashboard_widget_info.xml for why the update period is zero. -->
+<!--
+  updatePeriodMillis is 0 on purpose: the system's own period has a 30-minute
+  floor and wakes the device to honour it. This widget has nothing to fetch on
+  a schedule — it draws whatever the app last saw — so it is redrawn when a
+  snapshot arrives instead, and costs nothing in between.
+
+  minResizeWidth/Height are stated rather than left to default, and that
+  omission was a real one: without them the smallest a widget can be dragged
+  is its minWidth/minHeight, so a home screen whose cells are taller than this
+  content gave the widget more room than it asked for and offered no way to
+  take it back. minHeight is now measured against the laid-out content rather
+  than guessed, and the resize floor sits just under it.
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="110dp"
-    android:minHeight="58dp"
+    android:minHeight="60dp"
+    android:minResizeWidth="100dp"
+    android:minResizeHeight="52dp"
     android:targetCellWidth="2"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
@@ -11,5 +24,5 @@
     android:initialLayout="@layout/widget_mini"
     android:previewLayout="@layout/widget_mini"
     android:description="@string/widget_mini_description"
-    android:resizeMode="horizontal"
+    android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />

@@ -18,8 +18,35 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      Required, not optional, for a Live Update.
+
+      Without it the platform refuses to promote an ongoing notification
+      no matter how correctly it is built, and refuses it *silently*:
+      the notification still appears in the shade, so everything looks
+      like it worked while the status-bar chip and One UI's Now Bar stay
+      empty. That was exactly the reported fault. Normal permission —
+      granted at install, nothing to ask the user for.
+    -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!--
+      connectedDevice, not dataSync. This is not a permission upgrade — it is
+      a bug fix. From Android 15 a `dataSync` foreground service is capped at
+      six hours in any 24, after which the system calls Service.onTimeout()
+      and, if the service is still up moments later, kills the process with
+      "a foreground service of type dataSync did not stop within its
+      timeout". For a service whose entire job is to hold a link open
+      indefinitely that cap is not a limit to work within, it is a scheduled
+      crash — and because it lands while the app is backgrounded, it reads as
+      the app dying on its own, with the link then staying down because the
+      phone is the side that dials (see DeviceManager.reconnectPairedDevices).
+      `connectedDevice` has no such timeout and is the honest description of
+      what this does: hold a link to one of the user's own machines on the
+      LAN. It needs no permission the app did not already hold — the type's
+      prerequisite is satisfied by CHANGE_WIFI_MULTICAST_STATE above.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <application
         android:allowBackup="false"
@@ -67,6 +94,31 @@
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
         </activity>
+
+        <!-- The 4x3: the same readings as the 4x2, with room for the
+             computer's detail strings beside them. -->
+        <receiver
+            android:name=".widget.DashboardWidget$Detailed"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/detailed_widget_info" />
+        </receiver>
+
+        <!-- The 2x2 square: two readings with their detail. -->
+        <receiver
+            android:name=".widget.DashboardWidget$Tile"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tile_widget_info" />
+        </receiver>
 
         <receiver
             android:name=".widget.DashboardWidget$Compact"
@@ -218,7 +270,7 @@
         <service
             android:name=".service.MazeConnectService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- The non-URL half of "open on phone": copies text to the
              clipboard when the notification is tapped. Not exported — only

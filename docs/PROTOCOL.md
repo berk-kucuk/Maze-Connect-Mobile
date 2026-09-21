@@ -35,7 +35,21 @@ deliberately no second encryption layer inside it. See
 Identical flow to the desktop client:
 1. User selects a discovered device; a TLS 1.3 connection opens with the
    peer cert intentionally unverified, only inside the explicit pairing UI.
-2. Both sides exchange SubjectPublicKeyInfo DER public keys + a fresh nonce.
+2. The nonce exchange is **committed** and takes three messages:
+
+   ```
+   initiator -> responder : PairRequest  { commitment = commit(N_i) }
+   responder -> initiator : PairResponse { nonce = N_r }
+   initiator -> responder : PairReveal   { nonce = N_i }
+   ```
+
+   `commit(n) = SHA-256("maze-connect/sas-commit/v1" || len‖n)`, its own
+   context string so it cannot collide with the SAS hash over the same
+   nonce. The responder verifies the opened nonce against the commitment in
+   constant time and drops the link on a mismatch. Without this round a
+   man-in-the-middle can fix one side's code and then grind its own nonce
+   until the other side matches — 10^6 tries, under a second. See
+   docs/THREAT_MODEL.md.
 3. Both derive a 6-digit Short Authentication String over both public keys
    and nonces (length-prefixed, domain-separated). See
    docs/THREAT_MODEL.md for why this is not bound to the TLS exporter.

@@ -38,8 +38,8 @@ android {
         targetSdk = 37
         // Must never go backwards or repeat: Android refuses to install an
         // update whose versionCode is not higher than the installed one.
-        versionCode = 11
-        versionName = "0.10.0"
+        versionCode = 44
+        versionName = "0.13.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

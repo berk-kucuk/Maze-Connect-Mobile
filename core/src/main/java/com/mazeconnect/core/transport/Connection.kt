@@ -7,6 +7,7 @@ import com.mazeconnect.core.protocol.FrameType
 import com.mazeconnect.core.protocol.Message
 import com.mazeconnect.core.protocol.MessageType
 import com.mazeconnect.core.protocol.ReplayWindow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -130,6 +131,22 @@ class Connection(
         false
     }
 
+    /**
+     * Catches [Exception], not just [IOException].
+     *
+     * This loop runs inside a bare `scope.launch`, so anything it lets
+     * escape is an *uncaught* coroutine exception and takes the process
+     * down — with the app in the background, that is the app "crashing on
+     * its own" with nothing on screen to explain it. And plenty can escape:
+     * [drainFrames] calls straight into DeviceManager's message handlers,
+     * where a peer-supplied field that parses to something unexpected can
+     * raise a NumberFormatException, an IndexOutOfBoundsException, or an
+     * NPE — none of which are IOExceptions.
+     *
+     * A handler that throws is a bug in *this* link, so the link is what
+     * pays for it: close it, let onClosed run, and let the reconnect sweep
+     * dial again. That is a recoverable dropout instead of a dead process.
+     */
     private fun readLoop() {
         val buffer = ByteArray(16 * 1024)
         try {
@@ -145,8 +162,12 @@ class Connection(
                 parser.append(buffer, read)
                 if (!drainFrames()) return
             }
-        } catch (e: IOException) {
-            close(if (closed) null else e.message)
+        } catch (e: CancellationException) {
+            // close() cancels this job; that is an orderly shutdown, and
+            // swallowing it would break structured concurrency.
+            throw e
+        } catch (e: Exception) {
+            close(if (closed) null else (e.message ?: e.javaClass.simpleName))
         }
     }
 

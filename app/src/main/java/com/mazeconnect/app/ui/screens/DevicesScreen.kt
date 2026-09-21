@@ -48,6 +48,7 @@ fun DevicesScreen(
     onUnpair: (String) -> Unit,
     onReconnect: (String) -> Unit,
     onPairByAddress: (String) -> Unit,
+    onScan: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalMazeColors.current
@@ -62,6 +63,11 @@ fun DevicesScreen(
             Hairline(Modifier.weight(1f).height(1.dp))
             Spacer(Modifier.width(12.dp))
             MazeLabel(if (devices.size == 1) "1 device" else "${devices.size} devices")
+            Spacer(Modifier.width(12.dp))
+            // Discovery is passive, so an empty list is ambiguous: nothing
+            // out there, or we stopped hearing? This makes the second case
+            // pressable instead of leaving the user to restart the app.
+            MazeButton(text = "Scan", onClick = onScan, primary = false)
         }
 
         if (devices.isEmpty()) {
@@ -86,6 +92,8 @@ fun DevicesScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 24.dp),
                     )
+                    Spacer(Modifier.height(16.dp))
+                    MazeButton(text = "Scan again", onClick = onScan)
                     Spacer(Modifier.height(24.dp))
                     AddByAddress(onPairByAddress)
                 }
