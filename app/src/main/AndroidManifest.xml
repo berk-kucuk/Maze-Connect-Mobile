@@ -269,7 +269,33 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- "Send clipboard to computer", from the tile and the shortcut. Not
+             exported: both start it as this app. It reads the clipboard only
+             with focus and always asks before sending. -->
+        <activity
+            android:name=".share.ClipboardSendActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect.Transparent" />
+
+        <!-- Quick Settings tile. Exported with BIND_QUICK_SETTINGS_TILE, so
+             only the system can bind it. -->
+        <service
+            android:name=".tile.ClipboardTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_files"
+            android:label="@string/tile_clipboard"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".service.MazeConnectService"

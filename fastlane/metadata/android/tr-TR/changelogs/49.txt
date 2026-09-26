@@ -1,0 +1,3 @@
+• İndirmeden önce gör: bilgisayarın paylaşılan klasöründe küçük önizlemeler, İndir düğmeli büyük önizleme ve gelen resimlerde önizleme.
+• Uzaktan: fare/klavye isteği artık bilgisayarda bir onay penceresi açıyor — bir kez ya da her zaman izin ver — ve onaylayınca telefon hemen bağlanıyor.
+• Reddedilen isteklerde daha açık mesajlar.

@@ -443,4 +443,41 @@ class InteropTest {
         val text = JSONObject(String(Message.shareText(7, "a\nb").toJson(), Charsets.UTF_8))
         assertEquals("a\nb", text.getString("text"))
     }
+
+    @Test
+    fun remoteAndFolderMessageShape() {
+        // Duplicated in TestInterop::remoteAndFolderMessageShape.
+        assertEquals("remoteInput", Capability.REMOTE_INPUT.wire)
+        assertEquals("presenter", Capability.PRESENTER.wire)
+        assertEquals("clipboardSync", Capability.CLIPBOARD_SYNC.wire)
+        assertEquals("sharedFolder", Capability.SHARED_FOLDER.wire)
+
+        assertEquals("inputSession", MessageType.INPUT_SESSION.wire)
+        assertEquals("inputEvent", MessageType.INPUT_EVENT.wire)
+        assertEquals("inputState", MessageType.INPUT_STATE.wire)
+        assertEquals("folderList", MessageType.FOLDER_LIST.wire)
+        assertEquals("folderListing", MessageType.FOLDER_LISTING.wire)
+        assertEquals("folderFetch", MessageType.FOLDER_FETCH.wire)
+        assertEquals("folderFetchResult", MessageType.FOLDER_FETCH_RESULT.wire)
+        assertEquals("clipboardSync", MessageType.CLIPBOARD_SYNC.wire)
+
+        val session = JSONObject(String(Message.inputSession(1, true, "full").toJson(), Charsets.UTF_8))
+        assertTrue(session.getBoolean("start"))
+        assertEquals("full", session.getString("mode"))
+
+        // An event is flat: its fields sit beside the envelope.
+        val event = JSONObject(
+            String(
+                Message.inputEvent(2, JSONObject().put("kind", "move").put("dx", 3.5).put("dy", -1))
+                    .toJson(),
+                Charsets.UTF_8,
+            )
+        )
+        assertEquals("move", event.getString("kind"))
+        assertEquals(3.5, event.getDouble("dx"), 0.0)
+
+        val list = JSONObject(String(Message.folderList(3, 7, "Docs").toJson(), Charsets.UTF_8))
+        assertEquals(7L, list.getLong("requestId"))
+        assertEquals("Docs", list.getString("path"))
+    }
 }

@@ -330,6 +330,63 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---- Remote control --------------------------------------------------
+
+    val inputState: StateFlow<com.mazeconnect.core.InputSessionState?> =
+        combine(manager.input, selectedDeviceId) { map, id -> id?.let(map::get) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun startInput(full: Boolean) {
+        val id = selectedDeviceId.value
+        if (id == null) {
+            _status.value = "No paired computer is reachable right now."
+            return
+        }
+        manager.startInput(id, full)
+    }
+
+    fun stopInput() {
+        selectedDeviceId.value?.let(manager::stopInput)
+    }
+
+    fun sendInput(event: org.json.JSONObject) {
+        selectedDeviceId.value?.let { manager.sendInput(it, event) }
+    }
+
+    // ---- Shared folder ---------------------------------------------------
+
+    val sharedFolder: StateFlow<com.mazeconnect.core.SharedFolderState?> =
+        combine(manager.folder, selectedDeviceId) { map, id -> id?.let(map::get) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun listFolder(path: String) {
+        val id = selectedDeviceId.value
+        if (id == null) {
+            _status.value = "No paired computer is reachable right now."
+            return
+        }
+        manager.listFolder(id, path)
+    }
+
+    fun fetchFromFolder(path: String) {
+        val id = selectedDeviceId.value ?: return
+        _status.value = if (manager.fetchFromFolder(id, path)) {
+            "Downloading ${path.substringAfterLast('/')}…"
+        } else {
+            "That computer does not offer its shared folder."
+        }
+    }
+
+    val previews: StateFlow<Map<String, com.mazeconnect.core.Preview>> = manager.previews
+
+    fun requestPreview(path: String, large: Boolean) {
+        selectedDeviceId.value?.let { manager.requestPreview(it, path, large) }
+    }
+
+    var clipboardSyncEnabled: Boolean
+        get() = com.mazeconnect.app.service.PhonePrefs.clipboardSync(getApplication())
+        set(value) = com.mazeconnect.app.service.PhonePrefs.setClipboardSync(getApplication(), value, manager)
+
     // ---- This phone ------------------------------------------------------
 
     var shareStatusEnabled: Boolean
@@ -550,6 +607,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         // The dialog this event also raises is the real surface; the status
         // line just explains why it appeared.
         is DeviceEvent.PairingRequested -> "$deviceName wants to pair."
+        is DeviceEvent.ClipboardReceived -> "Clipboard from your computer."
         is DeviceEvent.FindPhone ->
             if (ring) "$deviceName is ringing this phone." else "Ringing stopped."
     }

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Long-press the launcher icon. The clipboard entry opens
+  ClipboardSendActivity, which asks before sending; the rest only choose which
+  tab MainActivity opens on — none of them does anything by itself.
+
+  targetPackage is the applicationId (build.gradle.kts), which resource XML
+  cannot read from the build; keep the two in step.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="clipboard"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_clipboard"
+        android:shortcutShortLabel="@string/shortcut_clipboard_short"
+        android:shortcutLongLabel="@string/shortcut_clipboard_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="tr.com.berkkucukk.mazeconnect"
+            android:targetClass="com.mazeconnect.app.share.ClipboardSendActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="media"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_media"
+        android:shortcutShortLabel="@string/shortcut_media">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="tr.com.berkkucukk.mazeconnect"
+            android:targetClass="com.mazeconnect.app.MainActivity">
+            <extra android:name="openTab" android:value="media" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="remote"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_remote"
+        android:shortcutShortLabel="@string/shortcut_remote">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="tr.com.berkkucukk.mazeconnect"
+            android:targetClass="com.mazeconnect.app.MainActivity">
+            <extra android:name="openTab" android:value="remote" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="files"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_files"
+        android:shortcutShortLabel="@string/shortcut_files">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="tr.com.berkkucukk.mazeconnect"
+            android:targetClass="com.mazeconnect.app.MainActivity">
+            <extra android:name="openTab" android:value="files" />
+        </intent>
+    </shortcut>
+</shortcuts>

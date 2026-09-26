@@ -1469,3 +1469,59 @@ olmayan anahtarlardan bahseden eski metin düzeltildi. Ayarlar kaydırılabilir.
 Lint 50 → 16 uyarı; kalanların hepsi bu turdan önce de vardı.
 
 Sürüm 0.15.0 / versionCode 47. **Masaüstü 1.3.0 ile birlikte yayınla.**
+
+
+---
+
+## 0.16.0 — pano kutucuğu ve kısayollar, "Kaydet", USB ikonu
+
+- **Hızlı Ayarlar kutucuğu "Clipboard to PC"** ve **başlatıcı kısayolları**
+  (uzun bas: Panoyu gönder, Medya, Komutlar, Dosyalar).
+  - Kutucuk arka planda çalışıyor ve Android orada pano okumayı reddediyor;
+    bu yüzden kutucuk hiçbir şey okumuyor ya da göndermiyor, yalnızca
+    `ClipboardSendActivity`'yi açıyor. O etkinlik panoyu **pencere odak
+    alınca** okuyor ve metni gösterip **onay istiyor** — paylaşım menüsüyle
+    aynı akış (`ShareReceiverActivity`'nin alt sınıfı). Dışa açık değil.
+  - Sekme kısayolları `MainActivity`'ye `openTab` ekstrası veriyor; değer
+    sabit tabloda aranıyor ve yalnızca açılış sekmesini seçiyor.
+  - `shortcuts.xml`'deki `targetPackage` applicationId'nin elle yazılmış
+    kopyası — değişirse ikisi birlikte değişmeli.
+- **Kaydet:** alınan dosya `CreateDocument` ile kullanıcının seçtiği yere
+  kopyalanıyor; depolama izni yok. Kaynak yolu inbox'ın gerçek (canonical)
+  yolu altında mı diye yeniden kontrol ediliyor, yani Kaydet başka bir özel
+  dosyayı dışarı kopyalamanın yolu olamıyor.
+- **Guard'da USB ikonu** (`ic_usb`); Guard'ın boş durumundaki artık var
+  olmayan anahtarlardan bahseden metin düzeltildi.
+
+Sürüm 0.16.0 / versionCode 48. Cihazda görülmedi.
+
+### 0.16.0 — ikinci tur: Remote sekmesi, paylaşılan klasör, pano senkronu
+
+- Alt çubuk: **Home, Media, Remote, Files, More** (Commands More altına).
+- **Remote**: Touchpad (sürükle, dokun = sol tık, iki parmak dokun = sağ tık,
+  iki parmak kaydırma, *Drag* düğmesi), Keyboard (yazılan fark olarak gider,
+  silme Backspace; Ctrl/Alt/Shift/Super bir sonraki tuşa uygulanır; tuş
+  satırları), Presenter (büyük İleri/Geri, Start/Black/End; **ses tuşları**
+  slayt değiştirir — `VolumeKeyRouter`, `onKeyDown`). Aktifken ekran açık kalır.
+- **Files → Computer's folder**: klasörler arasında gezinme, dosyaya dokununca
+  indirme. Yalnızca bu telefonun isteği için söz verilen transfer id'si
+  sorusuz kabul ediliyor (`expectedFetches`).
+- **Pano senkronu**: Ayarlar'da anahtar (varsayılan kapalı). Bilgisayarınki
+  hemen yazılıyor; telefonunki uygulama odak alınca gidiyor (Android kuralı),
+  hassas işaretli olanlar asla.
+- Kısayollardaki Commands yerine Remote.
+
+Doğrulama: derleme, birim testleri (+`InteropTest.remoteAndFolderMessageShape`),
+lint 15 (hepsi eski). Cihazda görülmedi.
+
+## 0.16.1 — onay bekleme durumu, resim önizlemeleri
+
+- Remote: `inputState.pending` → "Waiting for approval…" ve kutulu açıklama;
+  ret gerekçesi artık kutulu, görünür metin, düğme "Try again".
+- Paylaşılan klasör: resimlerde 44 dp önizleme (satır görününce istenir),
+  dokununca büyük önizleme + *Download*. Gelen dosya penceresinde resim
+  önizlemesi. `PreviewImage.decode`: base64 sınırı, sıkı çözme, yalnızca JPEG;
+  `validatedPreview`: piksel boyutu 2048 üstü reddediliyor (bitmap ayırmadan).
+  Önbellek en fazla 150 önizleme. `PreviewImageTest`.
+
+Sürüm 0.16.1 / versionCode 49. Cihazda görülmedi.

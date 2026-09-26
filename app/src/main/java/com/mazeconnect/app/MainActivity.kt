@@ -50,6 +50,8 @@ import com.mazeconnect.app.ui.screens.CommandsScreen
 import com.mazeconnect.app.ui.screens.DashboardScreen
 import com.mazeconnect.app.ui.screens.GuardScreen
 import com.mazeconnect.app.ui.screens.MediaScreen
+import com.mazeconnect.app.ui.screens.RemoteScreen
+import com.mazeconnect.app.ui.screens.SharedFolderScreen
 import com.mazeconnect.app.ui.screens.MorePage
 import com.mazeconnect.app.ui.screens.MoreScreen
 import com.mazeconnect.app.ui.screens.SubpageHeader
@@ -106,6 +108,18 @@ class MainActivity : ComponentActivity() {
         // straight onto that computer's data, not whichever one the
         // in-app switcher last had selected.
         val openDeviceId = intent?.getStringExtra(EXTRA_OPEN_DEVICE_ID)
+        // A launcher shortcut names a tab. Looked up in a fixed table: this
+        // activity is exported, and a name from outside only ever chooses
+        // which page is shown first.
+        val requested = intent?.getStringExtra(EXTRA_OPEN_TAB)
+        val openTab = when (requested) {
+            "media" -> TAB_MEDIA
+            "remote" -> TAB_REMOTE
+            "commands" -> TAB_MORE
+            "files" -> TAB_FILES
+            else -> TAB_HOME
+        }
+        val openMore = if (requested == "commands") MorePage.COMMANDS.name else null
 
         setContent {
             // A ViewModel, not a remembered object: the link must survive a
@@ -118,18 +132,55 @@ class MainActivity : ComponentActivity() {
             }
 
             MazeConnectTheme {
-                MazeConnectApp(state)
+                MazeConnectApp(state, openTab, openMore)
             }
+        }
+    }
+
+    /** Volume keys turn slides while the presenter is on screen. */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        val handler = com.mazeconnect.app.ui.screens.VolumeKeyRouter.handler
+        if (handler != null && isVolumeKey(keyCode)) {
+            if (event.repeatCount == 0) handler(keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP)
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (com.mazeconnect.app.ui.screens.VolumeKeyRouter.handler != null && isVolumeKey(keyCode)) {
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    private fun isVolumeKey(keyCode: Int) =
+        keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP ||
+            keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN
+
+    /** The one moment Android lets this app read the clipboard: its window
+     *  has focus. Sync sends from here (see ClipboardBridge). */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            com.mazeconnect.app.service.ClipboardBridge.sendIfChanged(
+                this, com.mazeconnect.app.service.MazeConnectService.manager(),
+            )
         }
     }
 
     companion object {
         const val EXTRA_OPEN_DEVICE_ID = "openDeviceId"
+        const val EXTRA_OPEN_TAB = "openTab"
     }
 }
 
 @Composable
-private fun MazeConnectApp(state: AppState) {
+private fun MazeConnectApp(
+    state: AppState,
+    initialTab: Int = TAB_HOME,
+    initialMorePage: String? = null,
+) {
     val devices by state.devices.collectAsState()
     val selectedDeviceId by state.selectedDeviceId.collectAsState()
     val pairing by state.pendingPairing.collectAsState()
@@ -150,8 +201,13 @@ private fun MazeConnectApp(state: AppState) {
 
     // Five fixed destinations; the rest live under More. See MoreScreen for
     // why the bar no longer carries every page.
-    var tab by rememberSaveable { mutableIntStateOf(TAB_HOME) }
-    var morePageName by rememberSaveable { mutableStateOf<String?>(null) }
+    var tab by rememberSaveable { mutableIntStateOf(initialTab) }
+    var morePageName by rememberSaveable { mutableStateOf(initialMorePage) }
+    var filesOnComputer by rememberSaveable { mutableStateOf(false) }
+    val inputState by state.inputState.collectAsState()
+    val sharedFolder by state.sharedFolder.collectAsState()
+    val previews by state.previews.collectAsState()
+    var clipboardSync by remember { mutableStateOf(state.clipboardSyncEnabled) }
     val morePage = morePageName?.let { name -> MorePage.entries.firstOrNull { it.name == name } }
     val colors = LocalMazeColors.current
     var shareStatus by remember { mutableStateOf(state.shareStatusEnabled) }
@@ -235,20 +291,52 @@ private fun MazeConnectApp(state: AppState) {
                         onWatch = state::watchMedia,
                         onCommand = state::mediaCommand,
                     )
-                    TAB_COMMANDS -> CommandsScreen(
+                    TAB_REMOTE -> RemoteScreen(
                         devices = devices,
                         selectedDeviceId = selectedDeviceId,
-                        state = commands,
-                        onRefresh = state::refreshCommands,
-                        onRun = state::runCommand,
+                        state = inputState,
+                        onStart = state::startInput,
+                        onStop = state::stopInput,
+                        onEvent = state::sendInput,
                     )
-                    TAB_FILES -> TransfersScreen(
-                        transfers = transfers,
-                        inboxPath = state.inboxPath,
-                        onClearFinished = state::clearFinishedTransfers,
-                        onSendFile = state::sendFile,
-                        onSendText = state::sendText,
-                    )
+                    TAB_FILES -> Column(Modifier.fillMaxSize()) {
+                        // Two places files live: here, and the one folder the
+                        // computer shares.
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        ) {
+                            com.mazeconnect.app.ui.components.MazeButton(
+                                "Transfers", { filesOnComputer = false },
+                                primary = !filesOnComputer, modifier = Modifier.weight(1f),
+                            )
+                            com.mazeconnect.app.ui.components.MazeButton(
+                                "Computer's folder", { filesOnComputer = true },
+                                primary = filesOnComputer, modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Box(Modifier.weight(1f)) {
+                            if (filesOnComputer) {
+                                SharedFolderScreen(
+                                    devices = devices,
+                                    selectedDeviceId = selectedDeviceId,
+                                    state = sharedFolder,
+                                    onList = state::listFolder,
+                                    onFetch = state::fetchFromFolder,
+                                    previews = previews,
+                                    onPreview = state::requestPreview,
+                                )
+                            } else {
+                                TransfersScreen(
+                                    transfers = transfers,
+                                    inboxPath = state.inboxPath,
+                                    onClearFinished = state::clearFinishedTransfers,
+                                    onSendFile = state::sendFile,
+                                    onSendText = state::sendText,
+                                )
+                            }
+                        }
+                    }
                     else -> if (morePage == null) {
                         MoreScreen(
                             pairedCount = devices.count { it.paired },
@@ -289,6 +377,12 @@ private fun MazeConnectApp(state: AppState) {
                                         state.allowRingEnabled = it
                                         allowRing = it
                                     },
+                                    clipboardSync = clipboardSync,
+                                    onSetClipboardSync = {
+                                        state.clipboardSyncEnabled = it
+                                        clipboardSync = it
+                                    },
+                                    commands = commands,
                                 )
                             }
                         }
@@ -307,7 +401,7 @@ private fun MazeConnectApp(state: AppState) {
             }
 
             if (!imeVisible) BottomNav(
-                items = listOf("Home", "Media", "Commands", "Files", "More"),
+                items = listOf("Home", "Media", "Remote", "Files", "More"),
                 selected = tab,
                 onSelect = { chosen ->
                     // Tapping More again while on one of its pages goes back
@@ -449,7 +543,7 @@ private fun BottomNav(items: List<String>, selected: Int, onSelect: (Int) -> Uni
     val icons = listOf(
         R.drawable.ic_home,
         R.drawable.ic_media,
-        R.drawable.ic_commands,
+        R.drawable.ic_remote,
         R.drawable.ic_files,
         R.drawable.ic_more,
     )
@@ -520,8 +614,18 @@ private fun MorePageContent(
     onSetShareStatus: (Boolean) -> Unit,
     allowRing: Boolean,
     onSetAllowRing: (Boolean) -> Unit,
+    clipboardSync: Boolean,
+    onSetClipboardSync: (Boolean) -> Unit,
+    commands: com.mazeconnect.core.CommandsState?,
 ) {
     when (page) {
+        MorePage.COMMANDS -> CommandsScreen(
+            devices = devices,
+            selectedDeviceId = selectedDeviceId,
+            state = commands,
+            onRefresh = state::refreshCommands,
+            onRun = state::runCommand,
+        )
         MorePage.DEVICES -> DevicesScreen(
             devices = devices,
             displayFingerprint = state::displayFingerprint,
@@ -565,12 +669,14 @@ private fun MorePageContent(
             allowRing = allowRing,
             onSetAllowRing = onSetAllowRing,
             onTestRing = state::testRing,
+            clipboardSync = clipboardSync,
+            onSetClipboardSync = onSetClipboardSync,
         )
     }
 }
 
 private const val TAB_HOME = 0
 private const val TAB_MEDIA = 1
-private const val TAB_COMMANDS = 2
+private const val TAB_REMOTE = 2
 private const val TAB_FILES = 3
 private const val TAB_MORE = 4

@@ -1,0 +1,5 @@
+• Remote: use the phone as a touchpad and keyboard for the computer (allowed per phone on the computer), or as a slide clicker — volume keys turn slides.
+• Browse and download from the computer's shared folder.
+• Clipboard sync with the computer (off until you turn it on).
+• Quick Settings tile and shortcuts; Save received files anywhere.
+• Guard: USB icon.

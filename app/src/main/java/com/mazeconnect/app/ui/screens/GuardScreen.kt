@@ -300,9 +300,9 @@ private fun whyNoGuardTarget(devices: List<DeviceRow>): String {
     return when {
         paired.isEmpty() -> "Pair with a computer first."
         paired.none { it.connected } -> "No paired computer is reachable right now."
-        else -> "Turn on Killswitches for the computer under Devices. This one is " +
-            "off by default for good reason — it is the only capability that " +
-            "changes that machine's protections."
+        else -> "The connected computer does not offer its killswitches to this phone — " +
+            "it was switched off on the computer's Devices page, or maze-guard is not " +
+            "installed there."
     }
 }
 
@@ -312,5 +312,6 @@ private fun deviceIcon(device: String): Int? = when (device) {
     "microphone" -> R.drawable.ic_microphone
     "wifi" -> R.drawable.ic_wifi
     "bluetooth" -> R.drawable.ic_bluetooth
+    "usb" -> R.drawable.ic_usb
     else -> null
 }

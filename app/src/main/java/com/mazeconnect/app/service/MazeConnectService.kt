@@ -246,6 +246,8 @@ class MazeConnectService : Service() {
                     is DeviceEvent.OpenOnPhone -> postOpenOnPhoneNotification(event.text)
                     is DeviceEvent.PairingRequested ->
                         postPairingNotification(event.deviceName)
+                    is DeviceEvent.ClipboardReceived ->
+                        ClipboardBridge.receive(this@MazeConnectService, event.text)
                     is DeviceEvent.FindPhone ->
                         if (event.ring) {
                             FindPhoneRinger.start(this@MazeConnectService, event.deviceName)

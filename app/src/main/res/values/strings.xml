@@ -58,4 +58,10 @@
     <string name="find_notification_title">Ringing — your computer is looking for this phone</string>
     <string name="find_notification_text">%1$s asked this phone to ring. Tap to stop.</string>
     <string name="find_notification_stop">Found it</string>
+    <string name="tile_clipboard">Clipboard to PC</string>
+    <string name="shortcut_clipboard_short">Send clipboard</string>
+    <string name="shortcut_clipboard_long">Send clipboard to computer</string>
+    <string name="shortcut_media">Media</string>
+    <string name="shortcut_remote">Remote</string>
+    <string name="shortcut_files">Files</string>
 </resources>

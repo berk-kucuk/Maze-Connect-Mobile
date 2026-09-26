@@ -158,6 +158,38 @@ data class GuardStateSnapshot(
     val error: String? = null,
 )
 
+/** Whether this phone is controlling a computer's pointer/keyboard. */
+data class InputSessionState(
+    val deviceId: String,
+    val active: Boolean,
+    /** "presenter" or "full". */
+    val mode: String,
+    val error: String? = null,
+    val starting: Boolean = false,
+)
+
+/** One entry of a computer's shared folder, bounded on arrival. */
+data class SharedEntry(val name: String, val dir: Boolean, val size: Long, val mtime: Long)
+
+/** What this phone is looking at in one computer's shared folder. */
+data class SharedFolderState(
+    val deviceId: String,
+    val path: String = "",
+    val entries: List<SharedEntry> = emptyList(),
+    val error: String? = null,
+    val loading: Boolean = false,
+    /** The last fetch that could not start, and why. */
+    val fetchError: String? = null,
+)
+
+/** A preview a computer sent, or the state of asking for one. */
+class Preview(
+    /** JPEG bytes, validated (see PreviewImage and DeviceManager). */
+    val jpeg: ByteArray?,
+    val error: String? = null,
+    val loading: Boolean = false,
+)
+
 /** An incoming file waiting for the user's decision. */
 data class PendingFileOffer(
     val deviceId: String,
@@ -165,6 +197,8 @@ data class PendingFileOffer(
     val transferId: Long,
     val filename: String,
     val sizeBytes: Long,
+    /** A picture's preview, when the computer sent one with the offer. */
+    val thumbnail: ByteArray? = null,
 )
 
 /** A transfer the user accepted, as the UI follows it. */
@@ -219,6 +253,10 @@ sealed interface DeviceEvent {
      */
     data class FindPhone(val deviceId: String, val deviceName: String, val ring: Boolean) :
         DeviceEvent
+
+    /** A computer's clipboard changed and sync is on here: the service puts
+     *  [text] on this phone's clipboard. */
+    data class ClipboardReceived(val deviceId: String, val text: String) : DeviceEvent
 }
 
 /**
@@ -382,6 +420,34 @@ class DeviceManager(
      *  same object for a couple of seconds instead of re-querying every
      *  system service each time. */
     @Volatile private var lastReading: Pair<Long, org.json.JSONObject>? = null
+
+    /** This phone's half of clipboard sync. Off until the owner turns it on. */
+    @Volatile var clipboardSyncEnabled: Boolean = false
+
+    private val _input = MutableStateFlow<Map<String, InputSessionState>>(emptyMap())
+    val input: StateFlow<Map<String, InputSessionState>> = _input.asStateFlow()
+
+    private val _folder = MutableStateFlow<Map<String, SharedFolderState>>(emptyMap())
+    val folder: StateFlow<Map<String, SharedFolderState>> = _folder.asStateFlow()
+
+    /** Our folder requests in flight: id -> (device, path). An answer is only
+     *  taken for a request of ours, from the device it went to. */
+    private val folderRequests = java.util.concurrent.ConcurrentHashMap<Long, Pair<String, String>>()
+    private val fetchRequests = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    private val nextFolderRequestId = java.util.concurrent.atomic.AtomicLong(1)
+
+    /** Transfer ids a computer promised in answer to *our* fetch. An offer
+     *  with one of these ids, from that computer, is what we asked for and is
+     *  accepted without a prompt; every other offer still asks. */
+    private val expectedFetches = java.util.concurrent.ConcurrentHashMap<Long, String>()
+
+    private val clipboardWindows = java.util.concurrent.ConcurrentHashMap<String, LongArray>()
+
+    /** Previews by "device|path|size", newest kept, at most [MAX_PREVIEWS]. */
+    private val _previews = MutableStateFlow<Map<String, Preview>>(emptyMap())
+    val previews: StateFlow<Map<String, Preview>> = _previews.asStateFlow()
+    private val previewRequests =
+        java.util.concurrent.ConcurrentHashMap<Long, Triple<String, String, Boolean>>()
 
     /** Computers that asked this phone to ring and are owed a "stopped". */
     private val ringRequesters = java.util.Collections.newSetFromMap(
@@ -952,6 +1018,16 @@ class DeviceManager(
 
             MessageType.FIND_PHONE -> handleFindPhone(link, message)
 
+            MessageType.INPUT_STATE -> handleInputState(link, message)
+
+            MessageType.FOLDER_LISTING -> handleFolderListing(link, message)
+
+            MessageType.FOLDER_FETCH_RESULT -> handleFolderFetchResult(link, message)
+
+            MessageType.CLIPBOARD_SYNC -> handleClipboardSync(link, message)
+
+            MessageType.FOLDER_PREVIEW_RESULT -> handleFolderPreviewResult(link, message)
+
             MessageType.FILE_CANCEL, MessageType.FILE_REJECT -> {
                 val id = message.integer("transferId", 0xFFFFFFFFL) ?: return
                 // Could be either direction: a file we were receiving, or one
@@ -1466,6 +1542,19 @@ class DeviceManager(
             }
             return
         }
+        // A file this phone asked for from the shared folder: the computer
+        // named this exact id, on this link, before offering it. Accepted
+        // without a prompt — the tap on the file was the answer. Any other
+        // offer, including one reusing a promised id from another computer,
+        // falls through to the prompt below.
+        if (expectedFetches.remove(transferId, link.deviceId)) {
+            acceptOffer(
+                link,
+                PendingFileOffer(link.deviceId, link.deviceName, transferId, filename, size),
+            )
+            return
+        }
+
         // One prompt at a time. A second offer arriving while the first is on
         // screen is refused rather than silently replacing it — otherwise a
         // sender could swap what the user is about to accept.
@@ -1482,13 +1571,15 @@ class DeviceManager(
         }
 
         // Never auto-accepted. An incoming file always waits for the user,
-        // exactly as on the desktop.
+        // exactly as on the desktop — now with a look at it first, when it is
+        // a picture and the computer sent a preview.
         _fileOffer.value = PendingFileOffer(
             deviceId = link.deviceId,
             deviceName = link.deviceName,
             transferId = transferId,
             filename = filename,
             sizeBytes = size,
+            thumbnail = validatedPreview(message.unvalidatedString("thumbnail")),
         )
     }
 
@@ -1507,6 +1598,10 @@ class DeviceManager(
             return
         }
 
+        acceptOffer(link, offer)
+    }
+
+    private fun acceptOffer(link: Link, offer: PendingFileOffer) {
         val error = receiver.begin(offer.transferId, offer.filename, offer.sizeBytes)
         if (error != null) {
             scope.launch {
@@ -1779,6 +1874,14 @@ class DeviceManager(
         // while its Wi-Fi drops in and out — but there is nobody left to
         // tell when it stops.
         ringRequesters.remove(deviceId)
+        _input.value[deviceId]?.let {
+            _input.put(deviceId, it.copy(active = false, starting = false))
+        }
+        folderRequests.entries.removeIf { it.value.first == deviceId }
+        previewRequests.entries.removeIf { it.value.first == deviceId }
+        fetchRequests.entries.removeIf { it.value == deviceId }
+        expectedFetches.entries.removeIf { it.value == deviceId }
+        _folder.value[deviceId]?.let { _folder.put(deviceId, it.copy(loading = false)) }
         // Only this device's entries — commandRuns and aiRequestIds are
         // shared across every connected computer, and clearing the whole
         // map here used to wipe another, still-connected computer's
@@ -1914,6 +2017,263 @@ class DeviceManager(
             link.connection.send(Message.shareText(link.connection.nextCounter(), text))
         }
         return true
+    }
+
+    // ---- Remote input ----------------------------------------------------
+
+    /**
+     * Ask to control [targetDeviceId]: [full] for pointer and keyboard,
+     * otherwise presenter keys only. The answer arrives as [input]. Full
+     * control is off on the computer until its owner allows this phone.
+     */
+    fun startInput(targetDeviceId: String, full: Boolean): Boolean {
+        val link = links[targetDeviceId] ?: return false
+        val ok = if (full) allowed(link, Capability.REMOTE_INPUT)
+        else allowed(link, Capability.PRESENTER) || allowed(link, Capability.REMOTE_INPUT)
+        val mode = if (full) "full" else "presenter"
+        if (!ok) {
+            _input.put(
+                targetDeviceId,
+                InputSessionState(
+                    targetDeviceId, false, mode,
+                    "This computer's Maze Connect does not offer that — update it to 1.4.0 or later.",
+                ),
+            )
+            return false
+        }
+        _input.put(targetDeviceId, InputSessionState(targetDeviceId, false, mode, null, starting = true))
+        scope.launch {
+            link.connection.send(Message.inputSession(link.connection.nextCounter(), true, mode))
+        }
+        return true
+    }
+
+    fun stopInput(targetDeviceId: String) {
+        val link = links[targetDeviceId]
+        _input.value[targetDeviceId]?.let {
+            _input.put(targetDeviceId, it.copy(active = false, starting = false, error = null))
+        }
+        link ?: return
+        scope.launch {
+            link.connection.send(
+                Message.inputSession(link.connection.nextCounter(), false, "presenter")
+            )
+        }
+    }
+
+    /** One event, only while a session is active. */
+    fun sendInput(targetDeviceId: String, event: org.json.JSONObject): Boolean {
+        val state = _input.value[targetDeviceId] ?: return false
+        if (!state.active) return false
+        val link = links[targetDeviceId] ?: return false
+        scope.launch {
+            link.connection.send(Message.inputEvent(link.connection.nextCounter(), event))
+        }
+        return true
+    }
+
+    private fun handleInputState(link: Link, message: Message) {
+        if (!allowed(link, Capability.PRESENTER) && !allowed(link, Capability.REMOTE_INPUT)) return
+        // Only about a session this phone asked for.
+        val previous = _input.value[link.deviceId] ?: return
+        val mode = message.string("mode", 16)?.takeIf { it == "full" || it == "presenter" }
+            ?: previous.mode
+        _input.put(
+            link.deviceId,
+            InputSessionState(
+                deviceId = link.deviceId,
+                active = message.boolean("active"),
+                mode = mode,
+                error = message.string("error", MAX_STATUS_ERROR_CHARS),
+                // The computer is asking its owner; the answer will come as
+                // another inputState, without this phone asking again.
+                starting = message.boolean("pending"),
+            ),
+        )
+    }
+
+    // ---- Shared folder ---------------------------------------------------
+
+    /** List one folder of [targetDeviceId]'s shared folder ("" is the top). */
+    fun listFolder(targetDeviceId: String, path: String): Boolean {
+        val link = links[targetDeviceId] ?: return false
+        if (!allowed(link, Capability.SHARED_FOLDER)) {
+            _folder.put(
+                targetDeviceId,
+                SharedFolderState(
+                    targetDeviceId, path,
+                    error = "This computer's Maze Connect does not share a folder — update it to 1.4.0 or later.",
+                ),
+            )
+            return false
+        }
+        if (path.length > MAX_FOLDER_PATH_CHARS) return false
+        val requestId = nextFolderRequestId.getAndIncrement()
+        folderRequests[requestId] = targetDeviceId to path
+        val previous = _folder.value[targetDeviceId] ?: SharedFolderState(targetDeviceId)
+        _folder.put(targetDeviceId, previous.copy(path = path, loading = true, error = null))
+        scope.launch {
+            link.connection.send(Message.folderList(link.connection.nextCounter(), requestId, path))
+        }
+        return true
+    }
+
+    /** Download one file from it; it arrives as an ordinary transfer. */
+    fun fetchFromFolder(targetDeviceId: String, path: String): Boolean {
+        val link = links[targetDeviceId] ?: return false
+        if (!allowed(link, Capability.SHARED_FOLDER) || !allowed(link, Capability.FILE_TRANSFER)) {
+            return false
+        }
+        if (path.isEmpty() || path.length > MAX_FOLDER_PATH_CHARS) return false
+        val requestId = nextFolderRequestId.getAndIncrement()
+        fetchRequests[requestId] = targetDeviceId
+        _folder.value[targetDeviceId]?.let { _folder.put(targetDeviceId, it.copy(fetchError = null)) }
+        scope.launch {
+            link.connection.send(Message.folderFetch(link.connection.nextCounter(), requestId, path))
+        }
+        return true
+    }
+
+    private fun handleFolderListing(link: Link, message: Message) {
+        if (!allowed(link, Capability.SHARED_FOLDER)) return
+        val requestId = message.integer("requestId", 0xFFFFFFFFL) ?: return
+        val (owner, path) = folderRequests.remove(requestId) ?: return
+        if (owner != link.deviceId) return
+
+        val error = message.string("error", MAX_STATUS_ERROR_CHARS)
+        val array = message.unvalidatedArray("entries")
+        val entries = ArrayList<SharedEntry>()
+        if (error == null && array != null) {
+            for (i in 0 until minOf(array.length(), MAX_FOLDER_ENTRIES)) {
+                val row = array.opt(i) as? org.json.JSONObject ?: continue
+                val name = row.optString("name")
+                // A name, not a path: nothing that could be read as "..", a
+                // separator, or text that moves the cursor.
+                if (name.isEmpty() || name.length > 255 || name == "." || name == ".." ||
+                    '/' in name || '\\' in name || !Message.isAllowedText(name) ||
+                    name.any { it == '\n' || it == '\r' || it == '\t' }
+                ) continue
+                val size = row.optLong("size", -1L).takeIf { it >= 0 } ?: 0L
+                entries.add(
+                    SharedEntry(name, row.optBoolean("dir", false), size, row.optLong("mtime", 0L))
+                )
+            }
+        }
+        _folder.put(
+            link.deviceId,
+            SharedFolderState(link.deviceId, path, entries, error, loading = false),
+        )
+    }
+
+    private fun handleFolderFetchResult(link: Link, message: Message) {
+        if (!allowed(link, Capability.SHARED_FOLDER)) return
+        val requestId = message.integer("requestId", 0xFFFFFFFFL) ?: return
+        val owner = fetchRequests.remove(requestId) ?: return
+        if (owner != link.deviceId) return
+        val transferId = message.integer("transferId", 0xFFFFFFFFL)
+        val error = message.string("error", MAX_STATUS_ERROR_CHARS)
+        if (transferId != null && error == null) {
+            expectedFetches[transferId] = link.deviceId
+        } else {
+            _folder.value[link.deviceId]?.let {
+                _folder.put(link.deviceId, it.copy(fetchError = error ?: "the computer refused"))
+            }
+        }
+    }
+
+    // ---- Previews ----------------------------------------------------------
+
+    /** Ask for a picture of one shared file; [large] for the viewer. */
+    fun requestPreview(targetDeviceId: String, path: String, large: Boolean): Boolean {
+        val key = previewKey(targetDeviceId, path, large)
+        val existing = _previews.value[key]
+        if (existing != null && (existing.jpeg != null || existing.loading)) return true
+        val link = links[targetDeviceId] ?: return false
+        if (!allowed(link, Capability.SHARED_FOLDER)) return false
+        if (path.isEmpty() || path.length > MAX_FOLDER_PATH_CHARS) return false
+        val requestId = nextFolderRequestId.getAndIncrement()
+        previewRequests[requestId] = Triple(targetDeviceId, path, large)
+        putPreview(key, Preview(null, loading = true))
+        scope.launch {
+            link.connection.send(
+                Message.folderPreview(link.connection.nextCounter(), requestId, path, large)
+            )
+        }
+        return true
+    }
+
+    private fun handleFolderPreviewResult(link: Link, message: Message) {
+        if (!allowed(link, Capability.SHARED_FOLDER)) return
+        val requestId = message.integer("requestId", 0xFFFFFFFFL) ?: return
+        val (owner, path, large) = previewRequests.remove(requestId) ?: return
+        if (owner != link.deviceId) return
+        val key = previewKey(owner, path, large)
+        val error = message.string("error", MAX_STATUS_ERROR_CHARS)
+        val jpeg = if (error == null) validatedPreview(message.unvalidatedString("data")) else null
+        putPreview(key, Preview(jpeg, error ?: if (jpeg == null) "unreadable preview" else null))
+    }
+
+    /**
+     * Preview bytes that are safe to hand to the decoder: capped, strictly
+     * base64, a JPEG, and — asked of the decoder without allocating pixels —
+     * no bigger than [PreviewImage.MAX_EDGE_PX] on either edge.
+     */
+    private fun validatedPreview(base64: String?): ByteArray? {
+        val bytes = com.mazeconnect.core.protocol.PreviewImage.decode(base64) ?: return null
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        runCatching { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds) }
+        val max = com.mazeconnect.core.protocol.PreviewImage.MAX_EDGE_PX
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+            bounds.outWidth > max || bounds.outHeight > max
+        ) return null
+        return bytes
+    }
+
+    private fun previewKey(deviceId: String, path: String, large: Boolean) =
+        "$deviceId|$path|${if (large) "large" else "thumb"}"
+
+    private fun putPreview(key: String, preview: Preview) {
+        val next = LinkedHashMap(_previews.value)
+        next.remove(key)
+        next[key] = preview
+        while (next.size > MAX_PREVIEWS) next.remove(next.keys.first())
+        _previews.value = next
+    }
+
+    // ---- Clipboard sync --------------------------------------------------
+
+    /** Send [text] to every linked computer that syncs. Returns how many. */
+    fun sendClipboard(text: String): Int {
+        if (!clipboardSyncEnabled) return 0
+        if (text.isBlank() || text.length > Limits.MAX_SHARE_TEXT_CHARS) return 0
+        if (!Message.isAllowedText(text)) return 0
+        var sent = 0
+        for (link in links.values) {
+            if (!allowed(link, Capability.CLIPBOARD_SYNC)) continue
+            sent++
+            scope.launch {
+                link.connection.send(Message.clipboardSync(link.connection.nextCounter(), text))
+            }
+        }
+        return sent
+    }
+
+    private fun handleClipboardSync(link: Link, message: Message) {
+        if (!clipboardSyncEnabled || !allowed(link, Capability.CLIPBOARD_SYNC)) return
+        // Five per ten seconds per computer: a clipboard that can be
+        // overwritten in a loop is one the owner cannot use.
+        val now = System.currentTimeMillis()
+        val window = clipboardWindows.getOrPut(link.deviceId) { longArrayOf(now, 0) }
+        synchronized(window) {
+            if (now - window[0] >= 10_000) {
+                window[0] = now
+                window[1] = 0
+            }
+            if (++window[1] > 5) return
+        }
+        val text = message.text("text", Limits.MAX_SHARE_TEXT_CHARS)?.takeIf { it.isNotEmpty() }
+            ?: return
+        emit(DeviceEvent.ClipboardReceived(link.deviceId, text))
     }
 
     // ---- Media -------------------------------------------------------------
@@ -2281,6 +2641,10 @@ class DeviceManager(
         /** How often to read the computer for the widget's benefit. Slow on
          *  purpose — the widget is glanced at, not watched. */
         private const val BACKGROUND_STATUS_INTERVAL_MS = 60_000L
+
+        private const val MAX_FOLDER_ENTRIES = 500
+        private const val MAX_PREVIEWS = 150
+        private const val MAX_FOLDER_PATH_CHARS = 1024
 
         /** How long one phone reading is reused for. */
         private const val PHONE_STATUS_CACHE_MS = 2_000L

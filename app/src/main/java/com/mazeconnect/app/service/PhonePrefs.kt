@@ -16,6 +16,7 @@ object PhonePrefs {
     private const val FILE = "phone_prefs"
     private const val KEY_SHARE_STATUS = "share_status"
     private const val KEY_ALLOW_RING = "allow_ring"
+    private const val KEY_CLIPBOARD_SYNC = "clipboard_sync"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -35,9 +36,19 @@ object PhonePrefs {
         if (!value) FindPhoneRinger.stop(context)
     }
 
+    /** Clipboard sync: off until the owner turns it on. */
+    fun clipboardSync(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_CLIPBOARD_SYNC, false)
+
+    fun setClipboardSync(context: Context, value: Boolean, manager: DeviceManager?) {
+        prefs(context).edit { putBoolean(KEY_CLIPBOARD_SYNC, value) }
+        manager?.clipboardSyncEnabled = value
+    }
+
     /** Copy the stored switches onto a freshly created manager. */
     fun apply(context: Context, manager: DeviceManager) {
         manager.phoneStatusSharing = shareStatus(context)
         manager.findPhoneAllowed = allowRing(context)
+        manager.clipboardSyncEnabled = clipboardSync(context)
     }
 }

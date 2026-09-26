@@ -1,0 +1,5 @@
+• Uzaktan: telefonu bilgisayara dokunmatik yüzey ve klavye yap (bilgisayarda telefon başına izin gerekir) ya da sunum kumandası — ses tuşları slayt değiştirir.
+• Bilgisayarın paylaşılan klasörüne göz at, dosya indir.
+• Bilgisayarla pano senkronu (sen açana kadar kapalı).
+• Hızlı Ayarlar kutucuğu ve kısayollar; gelen dosyayı istediğin yere kaydet.
+• Guard: USB ikonu.

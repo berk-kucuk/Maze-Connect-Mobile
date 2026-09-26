@@ -30,6 +30,7 @@ import com.mazeconnect.app.ui.theme.MazeColors
 /** The pages reached from More, by the name kept in saved state. */
 enum class MorePage(val title: String) {
     DEVICES("Devices"),
+    COMMANDS("Commands"),
     GUARD("Guard"),
     AI("Maze AI"),
     SETTINGS("Settings"),
@@ -69,6 +70,8 @@ fun MoreScreen(
             connectedCount == 0 -> "$pairedCount paired · none reachable right now"
             else -> "$pairedCount paired · $connectedCount linked"
         }, onOpen)
+        MoreRow(MorePage.COMMANDS, R.drawable.ic_commands,
+            "Run what the computer's owner has allowed", onOpen)
         MoreRow(MorePage.GUARD, R.drawable.ic_guard,
             "Camera, microphone, Wi-Fi and Bluetooth killswitches", onOpen)
         MoreRow(MorePage.AI, R.drawable.ic_ai, "Chat with the model on your computer", onOpen)

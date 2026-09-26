@@ -1,0 +1,3 @@
+• See pictures before downloading: thumbnails in the computer's shared folder, a large preview with Download, and a preview on incoming pictures.
+• Remote: asking for mouse and keyboard now opens a prompt on the computer — allow once or always — and the phone goes live as soon as you answer.
+• Clearer messages when something is refused.

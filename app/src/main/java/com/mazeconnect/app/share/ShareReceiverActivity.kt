@@ -46,7 +46,7 @@ private sealed interface Stage {
 }
 
 /** What was shared: files, or a piece of text (often a link). */
-private sealed interface Shared {
+internal sealed interface Shared {
     data class Files(val uris: List<Uri>) : Shared
     data class Text(val text: String) : Shared
 }
@@ -66,14 +66,51 @@ private sealed interface Shared {
  * owned by the process-scoped link, same as every other transfer; closing
  * this activity does not stop it.
  */
-class ShareReceiverActivity : ComponentActivity() {
+open class ShareReceiverActivity : ComponentActivity() {
+
+    /**
+     * Whether what is shared can only be read once the window has focus.
+     * True for the clipboard: Android 10+ hands an app its contents only
+     * while one of its windows is focused, and onCreate is too early.
+     */
+    protected open val readsOnFocus: Boolean = false
+
+    /** What to offer. The share sheet's intent, here; see subclasses. */
+    internal open fun readShared(): Shared? = extractShare(intent)
+
+    /** Said when there is nothing to send, instead of closing silently. */
+    protected open val nothingToSend: String? = null
+
+    private var shown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!readsOnFocus) present(readShared())
+    }
 
-        val shared = extractShare(intent)
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && readsOnFocus && !shown) present(readShared())
+    }
+
+    private fun present(shared: Shared?) {
+        shown = true
         if (shared == null) {
-            finish()
+            val message = nothingToSend
+            if (message == null) {
+                finish()
+                return
+            }
+            setContent {
+                MazeConnectTheme {
+                    Confirm(
+                        shared = Shared.Text(""),
+                        stage = Stage.Failed(message),
+                        onConfirm = {},
+                        onDismiss = { finish() },
+                    )
+                }
+            }
             return
         }
 
@@ -277,5 +314,28 @@ private fun Confirm(shared: Shared, stage: Stage, onConfirm: () -> Unit, onDismi
                 }
             }
         }
+    }
+}
+
+/**
+ * "Send clipboard to computer", from the Quick Settings tile and the app
+ * shortcut.
+ *
+ * Reads the clipboard only once its window has focus (the only moment
+ * Android allows it) and then asks, with the text in view, exactly like a
+ * share from another app — nothing is sent without that tap. Not exported:
+ * only this app's own tile and shortcut can start it.
+ */
+class ClipboardSendActivity : ShareReceiverActivity() {
+    override val readsOnFocus: Boolean = true
+
+    override val nothingToSend: String = "There is no text on the clipboard."
+
+    override fun readShared(): Shared? {
+        val clip = getSystemService(android.content.ClipboardManager::class.java)
+            ?.primaryClip ?: return null
+        if (clip.itemCount == 0) return null
+        val text = clip.getItemAt(0).coerceToText(this)?.toString()?.trim().orEmpty()
+        return text.takeIf { it.isNotEmpty() }?.let { Shared.Text(it) }
     }
 }

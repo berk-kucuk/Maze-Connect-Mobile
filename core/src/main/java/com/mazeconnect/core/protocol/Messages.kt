@@ -68,7 +68,37 @@ enum class MessageType(val wire: String) {
     FIND_PHONE_RESULT("findPhoneResult"),
 
     /** Phone -> computer: text or a link for the clipboard. */
-    SHARE_TEXT("shareText");
+    SHARE_TEXT("shareText"),
+
+    /** Phone -> computer: start or stop controlling, in a mode. */
+    INPUT_SESSION("inputSession"),
+
+    /** Phone -> computer: one pointer, key or text event. */
+    INPUT_EVENT("inputEvent"),
+
+    /** Computer -> phone: whether this phone is controlling now, or why not. */
+    INPUT_STATE("inputState"),
+
+    /** Phone -> computer: list one folder of the shared folder. */
+    FOLDER_LIST("folderList"),
+
+    /** Computer -> phone: its entries, or why not. */
+    FOLDER_LISTING("folderListing"),
+
+    /** Phone -> computer: send me this file from the shared folder. */
+    FOLDER_FETCH("folderFetch"),
+
+    /** Computer -> phone: the transfer id about to be offered, or why not. */
+    FOLDER_FETCH_RESULT("folderFetchResult"),
+
+    /** Either way: the sender's clipboard changed. */
+    CLIPBOARD_SYNC("clipboardSync"),
+
+    /** Phone -> computer: a small picture of this shared file. */
+    FOLDER_PREVIEW("folderPreview"),
+
+    /** Computer -> phone: that picture (JPEG, base64), or why not. */
+    FOLDER_PREVIEW_RESULT("folderPreviewResult");
 
     companion object {
         fun from(wire: String?): MessageType? = entries.firstOrNull { it.wire == wire }
@@ -183,6 +213,13 @@ class Message private constructor(
      * how the dashboard snapshot is actually validated before it is shown.
      */
     fun unvalidatedObject(key: String): JSONObject? = body.opt(key) as? JSONObject
+
+    /**
+     * A string returned **unchecked** — for bulk data (a base64 preview) far
+     * past what [string] bounds, which the caller validates itself. Named so
+     * it cannot be reached for by accident.
+     */
+    fun unvalidatedString(key: String): String? = body.opt(key) as? String
 
     /**
      * A nested array, returned **unchecked**, with the same caveat as
@@ -513,6 +550,50 @@ class Message private constructor(
         /** Text or a link for the computer's clipboard. */
         fun shareText(counter: Long, text: String) =
             build(MessageType.SHARE_TEXT, counter) { put("text", text) }
+
+        /** [mode] is "presenter" or "full". */
+        fun inputSession(counter: Long, start: Boolean, mode: String) =
+            build(MessageType.INPUT_SESSION, counter) {
+                put("start", start)
+                put("mode", mode)
+            }
+
+        /** One event: [event] carries `kind` and its fields — see PROTOCOL.md. */
+        fun inputEvent(counter: Long, event: JSONObject) =
+            build(MessageType.INPUT_EVENT, counter) {
+                for (key in event.keys()) put(key, event.get(key))
+            }
+
+        /** Sent by the computer; here so the interop vectors can build it. */
+        fun inputState(counter: Long, active: Boolean, mode: String, error: String? = null) =
+            build(MessageType.INPUT_STATE, counter) {
+                put("active", active)
+                put("mode", mode)
+                if (!error.isNullOrEmpty()) put("error", error)
+            }
+
+        fun folderList(counter: Long, requestId: Long, path: String) =
+            build(MessageType.FOLDER_LIST, counter) {
+                put("requestId", requestId)
+                put("path", path)
+            }
+
+        fun folderFetch(counter: Long, requestId: Long, path: String) =
+            build(MessageType.FOLDER_FETCH, counter) {
+                put("requestId", requestId)
+                put("path", path)
+            }
+
+        /** [large]: the full preview for the viewer; otherwise a list thumbnail. */
+        fun folderPreview(counter: Long, requestId: Long, path: String, large: Boolean) =
+            build(MessageType.FOLDER_PREVIEW, counter) {
+                put("requestId", requestId)
+                put("path", path)
+                put("size", if (large) "large" else "thumb")
+            }
+
+        fun clipboardSync(counter: Long, text: String) =
+            build(MessageType.CLIPBOARD_SYNC, counter) { put("text", text) }
     }
 }
 

@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -59,6 +61,18 @@ fun FileOfferDialog(
         ) {
             MazeLabel("Incoming file")
             Spacer(Modifier.height(12.dp))
+            // A picture shows itself before it is accepted: the preview the
+            // computer sent with the offer. Nothing is written until Accept.
+            offer.thumbnail?.let { jpeg ->
+                com.mazeconnect.app.ui.components.PreviewImage(
+                    jpeg = jpeg,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp)
+                        .border(1.dp, colors.hairline, RectangleShape),
+                )
+                Spacer(Modifier.height(14.dp))
+            }
             Text(
                 text = offer.filename,
                 style = MaterialTheme.typography.titleLarge,

@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -33,6 +35,7 @@ import com.mazeconnect.app.ui.theme.LocalMazeColors
 import com.mazeconnect.app.ui.theme.MazeColors
 import com.mazeconnect.core.IncomingTransfer
 import java.io.File
+import kotlinx.coroutines.launch
 
 /**
  * Files this phone has received.
@@ -60,6 +63,29 @@ fun TransfersScreen(
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(onSendFile) }
+
+    // "Save as": the system's own save dialog, so a received file can go to
+    // Downloads, an SD card or a cloud folder without this app holding any
+    // storage permission — the user grants exactly the one destination.
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var pendingSave by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+    val saver = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("*/*")
+    ) { target ->
+        val source = pendingSave
+        pendingSave = null
+        if (target == null || source == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = saveCopy(context, inboxPath, source, target)
+            android.widget.Toast.makeText(
+                context,
+                if (ok) "Saved." else "Could not save that file.",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
 
     Column(modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Row(
@@ -149,6 +175,11 @@ fun TransfersScreen(
                             )
                         }
                         if (transfer.done && transfer.error == null && transfer.path != null) {
+                            MazeButton("Save", {
+                                pendingSave = transfer.path
+                                runCatching { saver.launch(File(transfer.path!!).name) }
+                            }, primary = false)
+                            Spacer(Modifier.width(8.dp))
                             MazeButton("Open", { openFile(context, transfer.path!!) })
                         }
                     }
@@ -176,6 +207,33 @@ fun TransfersScreen(
             }
         }
     }
+}
+
+/**
+ * Copy a received file to where the user chose.
+ *
+ * Only a file inside the inbox is ever read: the path comes from this app's
+ * own transfer list, and it is checked again here against the inbox's real
+ * location, so nothing — a symlink, a stale row — can turn Save into a way
+ * of copying some other private file out.
+ */
+private suspend fun saveCopy(
+    context: Context,
+    inboxPath: String,
+    path: String,
+    target: android.net.Uri,
+): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    runCatching {
+        val inbox = File(inboxPath).canonicalFile
+        val file = File(path).canonicalFile
+        if (!file.path.startsWith(inbox.path + File.separator) || !file.isFile) {
+            return@runCatching false
+        }
+        context.contentResolver.openOutputStream(target, "w")?.use { out ->
+            file.inputStream().use { it.copyTo(out) }
+            true
+        } ?: false
+    }.getOrDefault(false)
 }
 
 /**

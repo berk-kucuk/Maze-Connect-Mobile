@@ -124,6 +124,21 @@ shareText. On this side:
 * `DeviceManager.shareText` refuses, before sending, anything the computer
   would refuse — over 16 384 characters, or `Message.isAllowedText` false.
 
+## Remote control, clipboard sync, shared folder
+
+Contract: `Maze-Connect/docs/PROTOCOL.md` §§ remoteInput and presenter,
+clipboardSync, sharedFolder. On this side:
+
+* `DeviceManager.startInput/sendInput/stopInput`; `inputState` is taken only
+  for a session this phone asked for. The Remote tab sends key *names* only.
+* `ClipboardBridge` writes a computer's clipboard at any time and sends this
+  phone's when an app window gains focus (the only time Android allows
+  reading it), never text marked sensitive, never an echo.
+* `listFolder/fetchFromFolder`: listings are taken only for our own request
+  id from the device it went to, and names are bounded (no separators, no
+  `..`, no controls). `expectedFetches` holds the ids a computer promised for
+  our fetches; only those offers skip the prompt.
+
 ## Scope
 
 v2 dropped notification mirroring, clipboard sync and ping/find-my-device:

@@ -62,6 +62,8 @@ fun SettingsScreen(
     allowRing: Boolean = true,
     onSetAllowRing: (Boolean) -> Unit = {},
     onTestRing: () -> Unit = {},
+    clipboardSync: Boolean = false,
+    onSetClipboardSync: (Boolean) -> Unit = {},
 ) {
     val colors = LocalMazeColors.current
     val context = LocalContext.current
@@ -155,6 +157,28 @@ fun SettingsScreen(
             Spacer(Modifier.width(10.dp))
             MazeButton(text = "Test ring", onClick = onTestRing, primary = false, enabled = allowRing)
         }
+
+        Spacer(Modifier.height(22.dp))
+        Text(
+            text = "Clipboard sync",
+            style = MaterialTheme.typography.titleMedium,
+            color = MazeColors.Paper,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "What you copy on the computer lands here straight away. What you copy " +
+                "here goes to the computer when you open Maze Connect — Android lets no app " +
+                "read the clipboard in the background. Passwords marked sensitive are never " +
+                "sent. The computer has its own switch.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.dim,
+        )
+        Spacer(Modifier.height(12.dp))
+        MazeButton(
+            text = if (clipboardSync) "On" else "Off",
+            onClick = { onSetClipboardSync(!clipboardSync) },
+            primary = false,
+        )
 
         if (liveStatusSupported) {
             Spacer(Modifier.height(24.dp))
