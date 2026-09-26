@@ -1,50 +1,46 @@
 # Maze Connect Mobile
 
-The **Android client** for Maze Connect — the phone half of managing
-[Maze Linux](https://github.com/berk-kucuk/MazeLinux) remotely.
-
-Not a KDE Connect clone. Clipboard sync, notification mirroring and
-find-my-device were removed rather than reimplemented; KDE Connect already
-does them well. What is left is what only this app can do: read the
-computer's dashboard, run commands it has defined in advance, toggle
-maze-guard's killswitches, and talk to Maze AI. File transfer stayed.
-
-The wire protocol is custom (not KDE-Connect-compatible) and built around
-mutual TLS 1.3, EC P-256 device identity and SAS-verified pairing. See
-[`docs/PROTOCOL.md`](docs/PROTOCOL.md) and
-[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for the full design.
+The **Android client** for Maze Connect — your phone and your
+[Maze Linux](https://github.com/berk-kucuk/MazeLinux) computer, linked over
+the LAN with verified, pinned mutual TLS.
 
 The desktop counterpart lives at
 [Maze-Connect](https://github.com/berk-kucuk/Maze-Connect).
 
+## What it does
+
+- **Home** — the computer's dashboard: CPU, memory, disk and temperatures with
+  their detail, security services, network and hardening score. Also as a
+  live status-bar reading (Now Bar on One UI) and as home-screen widgets.
+- **Media** — every player on the computer (Spotify, browsers, VLC…): play,
+  pause, skip, seek, player and system volume; with lock-screen controls.
+- **Commands** — run entries from an allow-list defined *on the computer*;
+  pinned ones on a home-screen widget.
+- **Files** — both ways; from any app's Share menu; and **Clipboard**, which
+  puts what you copied on the computer's clipboard. Sharing a link or text
+  from any app sends it the same way.
+- **More** — Devices (pair, reconnect), Guard (maze-guard killswitches, also
+  as a widget), Maze AI chat through the computer's Ollama, Settings.
+- **The computer sees this phone** — battery, storage, memory, network,
+  ringer — and can **ring it** when it is lost: full volume even on silent,
+  until you tap *Found it*. Both have an owner switch in Settings.
+
+### Widgets
+
+Five dashboard placements (2×1, 2×2, 4×1, 4×2 grid, 4×2 detailed), killswitch
+controls and pinned commands. Each widget carries several layouts measured
+for different sizes and shows the one that fits the space it is actually
+given — so it is neither clipped on a short grid nor half empty on a tall one,
+and it rearranges when rotated or resized (`WidgetSizing`).
+
 ## Status
 
-The transport is done and verified against the real desktop client: the
-protocol core (framing, replay window, filename sanitisation, SAS
-derivation), a hardware-backed Keystore identity, the pinned `TrustManager`,
-mutual-TLS links, the pairing state machine, LAN discovery, pairing by typed
-address, and the Compose UI. 45 unit tests, including golden vectors shared
-with the desktop client so the two wire formats cannot silently drift apart.
-
-**Verified end to end on an Android emulator:** paired with the desktop
-client over real mutual TLS, both screens showed the identical code
-`358329`, and both sides pinned the other's public key.
-
-The dashboard (`systemStatus`) is code complete and awaiting a real-device
-pass. Everything it displays arrives from the computer and is bounded field
-by field in `SystemStatus.kt` before it reaches the screen — lengths capped,
-control characters refused, row counts limited, percentages clamped. The link
-is authenticated, which is not the same as the machine at the other end being
-trustworthy.
-
-Every management feature is a **capability that is off by default and enabled
-per device**, on the Devices page. Pairing settles who a device is; it never
-settles what it may be asked for. That holds for the dashboard too, which
-only reads — "only reads" still covers the hostname, the local IP, the
-kernel, the hardware and which security services are running.
-
-Not yet implemented: receiving files (offers are refused rather than
-written), and BiometricPrompt gating on destructive actions.
+The transport is done and verified against the real desktop client, with
+golden vectors shared between the two so the wire formats cannot drift. Every
+value a computer sends is bounded field by field before it reaches the screen
+(`SystemStatus`, `MediaState`), and every capability is granted by pairing and
+revocable per device on the computer. Not yet implemented: BiometricPrompt
+gating on destructive actions.
 
 ## Layout
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,11 +56,25 @@ fun SettingsScreen(
     onSetUpdateCheckEnabled: (Boolean) -> Unit,
     onCheckForUpdate: () -> Unit,
     modifier: Modifier = Modifier,
+    updateCheckAvailable: Boolean = true,
+    shareStatus: Boolean = true,
+    onSetShareStatus: (Boolean) -> Unit = {},
+    allowRing: Boolean = true,
+    onSetAllowRing: (Boolean) -> Unit = {},
+    onTestRing: () -> Unit = {},
 ) {
     val colors = LocalMazeColors.current
     val context = LocalContext.current
 
-    Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
+    // Scrolls: with the phone's own switches added, the page is taller than
+    // a small screen, and a settings page whose last section cannot be
+    // reached is a settings page with a missing setting.
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(20.dp),
+    ) {
         Spacer(Modifier.height(8.dp))
         MazeLabel("This device")
         Spacer(Modifier.height(14.dp))
@@ -87,6 +102,59 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = colors.dim,
         )
+
+        Spacer(Modifier.height(24.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
+        Spacer(Modifier.height(24.dp))
+
+        // What paired computers may do *to this phone*. The phone's owner
+        // decides these here, the same way the computer's owner decides what
+        // the computer offers on its own Devices page.
+        MazeLabel("This phone")
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "Share status with your computer",
+            style = MaterialTheme.typography.titleMedium,
+            color = MazeColors.Paper,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "The computer's dashboard shows this phone's battery, storage, memory, " +
+                "network type and ringer mode. Never your location, Wi-Fi name, contacts, " +
+                "messages or apps.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.dim,
+        )
+        Spacer(Modifier.height(12.dp))
+        MazeButton(
+            text = if (shareStatus) "On" else "Off",
+            onClick = { onSetShareStatus(!shareStatus) },
+            primary = false,
+        )
+
+        Spacer(Modifier.height(22.dp))
+        Text(
+            text = "Let your computer ring this phone",
+            style = MaterialTheme.typography.titleMedium,
+            color = MazeColors.Paper,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Find my phone: rings at full volume, even on silent, until you tap " +
+                "Found it or two minutes pass. Your alarm volume is put back afterwards.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.dim,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MazeButton(
+                text = if (allowRing) "On" else "Off",
+                onClick = { onSetAllowRing(!allowRing) },
+                primary = false,
+            )
+            Spacer(Modifier.width(10.dp))
+            MazeButton(text = "Test ring", onClick = onTestRing, primary = false, enabled = allowRing)
+        }
 
         if (liveStatusSupported) {
             Spacer(Modifier.height(24.dp))
@@ -177,6 +245,17 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(12.dp))
+
+        if (!updateCheckAvailable) {
+            // The F-Droid build: F-Droid is where updates come from, and this
+            // build never contacts anything but your own computers.
+            Text(
+                text = "Updates are delivered by F-Droid.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.dim,
+            )
+            return@Column
+        }
 
         val newer = update.newer
         Text(

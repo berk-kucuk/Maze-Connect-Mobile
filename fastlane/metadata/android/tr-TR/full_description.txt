@@ -1,0 +1,28 @@
+<p>Maze Connect, Android telefonunu Linux bilgisayarına kendi ağın üzerinden bağlar — hesap yok, bulut yok, arada sunucu yok. <a href="https://github.com/berk-kucuk/MazeLinux">Maze Linux</a> için yapıldı; Maze Connect masaüstü uygulamasını çalıştıran her Arch tabanlı masaüstünde çalışır.</p>
+
+<p><b>Telefondan</b></p>
+<ul>
+<li>Bilgisayarın <b>panosu</b>: CPU, bellek, disk, sıcaklıklar, güvenlik servisleri ve sertleştirme skoru — durum çubuğunda ve her boya uyan ana ekran widget'larında da.</li>
+<li>Bilgisayardaki her oynatıcı için <b>medya kontrolü</b> (Spotify, tarayıcılar, VLC…), sistem sesi ve kilit ekranı kontrolleri.</li>
+<li>Bilgisayar sahibinin önceden izin verdiği <b>komutlar</b> — asla kabuk değil.</li>
+<li>Bilgisayarın kamera, mikrofon, Wi-Fi ve Bluetooth <b>kill-switch'leri</b>.</li>
+<li>İki yönde <b>dosya</b>; herhangi bir uygulamanın Paylaş menüsünden metin ve link doğrudan bilgisayarın panosuna.</li>
+<li>Kendi bilgisayarında çalışan <b>Maze AI</b> ile sohbet.</li>
+</ul>
+
+<p><b>Bilgisayardan</b></p>
+<ul>
+<li>Telefonun pilini, depolamasını, ağını ve zil modunu masaüstü panosunda gör.</li>
+<li><b>Telefonumu bul:</b> sessizdeyken bile en yüksek sesle çaldır.</li>
+<li>Telefona link ve pano metni gönder.</li>
+</ul>
+
+<p><b>Gizlilik önce</b></p>
+<ul>
+<li>Sabitlenmiş anahtarlarla karşılıklı TLS 1.3; eşleştirme iki ekranda altı haneli kod karşılaştırılarak onaylanır.</li>
+<li>Anahtarlar Android Keystore'da durur, telefondan hiç çıkmaz.</li>
+<li>Konum, rehber, depolama ya da telefon durumu izni yok. Analitik, reklam, izleme yok — uygulama yalnızca eşleştirdiğin bilgisayarlarla konuşur.</li>
+<li>Her özellik cihaz başına geri alınabilir; durum paylaşımı ve çaldırma için telefon sahibinin ayrı anahtarları var.</li>
+</ul>
+
+<p>Aynı ağda Maze Connect masaüstü uygulaması gerekir (Arch/Maze Linux paketi <i>maze-connect</i>).</p>

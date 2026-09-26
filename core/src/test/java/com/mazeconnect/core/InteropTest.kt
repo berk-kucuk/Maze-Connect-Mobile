@@ -402,4 +402,45 @@ class InteropTest {
             Sas.derive(a, b, ByteArray(Sas.NONCE_SIZE) { 1 }, ByteArray(Sas.NONCE_SIZE) { 2 }),
         )
     }
+
+    @Test
+    fun phoneMessageShape() {
+        // Duplicated in TestInterop::phoneMessageShape.
+        assertEquals("phoneStatus", Capability.PHONE_STATUS.wire)
+        assertEquals("findPhone", Capability.FIND_PHONE.wire)
+        assertEquals("shareText", Capability.SHARE_TEXT.wire)
+        assertTrue(Capability.PHONE_STATUS in Capability.SUPPORTED)
+        assertTrue(Capability.FIND_PHONE in Capability.SUPPORTED)
+        assertTrue(Capability.SHARE_TEXT in Capability.SUPPORTED)
+        // New to 0.15.0: must not be in the legacy set, or pairings made
+        // before it would never be granted them.
+        assertTrue(Capability.PHONE_STATUS !in Capability.LEGACY_KNOWN)
+
+        assertEquals("phoneStatusRequest", MessageType.PHONE_STATUS_REQUEST.wire)
+        assertEquals("phoneStatus", MessageType.PHONE_STATUS.wire)
+        assertEquals("findPhone", MessageType.FIND_PHONE.wire)
+        assertEquals("findPhoneResult", MessageType.FIND_PHONE_RESULT.wire)
+        assertEquals("shareText", MessageType.SHARE_TEXT.wire)
+
+        val report = JSONObject(
+            String(
+                Message.phoneStatus(4, JSONObject().put("battery", JSONObject().put("level", 50)))
+                    .toJson(),
+                Charsets.UTF_8,
+            )
+        )
+        assertEquals(50, report.getJSONObject("status").getJSONObject("battery").getInt("level"))
+
+        val ring = JSONObject(String(Message.findPhone(5, true).toJson(), Charsets.UTF_8))
+        assertTrue(ring.getBoolean("ring"))
+
+        val answer = JSONObject(
+            String(Message.findPhoneResult(6, false, "off").toJson(), Charsets.UTF_8)
+        )
+        assertEquals(false, answer.getBoolean("ringing"))
+        assertEquals("off", answer.getString("error"))
+
+        val text = JSONObject(String(Message.shareText(7, "a\nb").toJson(), Charsets.UTF_8))
+        assertEquals("a\nb", text.getString("text"))
+    }
 }

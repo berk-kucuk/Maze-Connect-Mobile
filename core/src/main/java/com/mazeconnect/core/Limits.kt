@@ -26,6 +26,10 @@ object Limits {
     /** Longest "open on phone" text accepted from the computer. */
     const val MAX_OPEN_TEXT_CHARS = 4096
 
+    /** Longest text this phone shares to a computer's clipboard. Matches the
+     *  desktop's kMaxShareTextChars; longer is refused, never truncated. */
+    const val MAX_SHARE_TEXT_CHARS = 16384
+
     const val HANDSHAKE_TIMEOUT_MS = 15_000
 
     /**

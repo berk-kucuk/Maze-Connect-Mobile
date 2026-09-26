@@ -246,6 +246,12 @@ class MazeConnectService : Service() {
                     is DeviceEvent.OpenOnPhone -> postOpenOnPhoneNotification(event.text)
                     is DeviceEvent.PairingRequested ->
                         postPairingNotification(event.deviceName)
+                    is DeviceEvent.FindPhone ->
+                        if (event.ring) {
+                            FindPhoneRinger.start(this@MazeConnectService, event.deviceName)
+                        } else {
+                            FindPhoneRinger.stop(this@MazeConnectService)
+                        }
                     // A pairing that ended, either way, retires its
                     // notification: leaving it up invites a tap that opens
                     // an app with no dialog in it.
@@ -301,14 +307,15 @@ class MazeConnectService : Service() {
 
     private fun postOpenOnPhoneNotification(text: String) {
         val manager = getSystemService(NotificationManager::class.java)
-        val isUrl = Patterns.WEB_URL.matcher(text).matches()
+        val link = webLink(text)
+        val isUrl = link != null
 
         val tap = if (isUrl) {
             // An Activity start from a notification tap — the one context
             // this restriction does not apply to.
             PendingIntent.getActivity(
                 this, 0,
-                Intent(Intent.ACTION_VIEW, Uri.parse(text)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent(Intent.ACTION_VIEW, link).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         } else {
@@ -326,7 +333,7 @@ class MazeConnectService : Service() {
         val notification = NotificationCompat.Builder(this, OPEN_CHANNEL_ID)
             .setContentTitle(getString(R.string.open_on_phone_notification_title))
             .setContentText(
-                if (isUrl) text else getString(R.string.open_on_phone_notification_text),
+                if (link != null) link.toString() else getString(R.string.open_on_phone_notification_text),
             )
             .setSmallIcon(android.R.drawable.ic_menu_send)
             .setAutoCancel(true)
@@ -334,6 +341,29 @@ class MazeConnectService : Service() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
         manager.notify(OPEN_NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * An http(s) link to open, or null for anything that should only be
+     * copied.
+     *
+     * Patterns.WEB_URL alone was the test before, and it is far looser than
+     * "safe to hand to ACTION_VIEW": it matches bare hosts ("example.com"),
+     * which Uri.parse turns into a scheme-less Uri no browser will take — so
+     * the tap silently did nothing. Scheme-less links now get https, and
+     * anything with another scheme (intent:, file:, content:, javascript:) is
+     * never opened, only copied.
+     */
+    private fun webLink(text: String): Uri? {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() || trimmed.any { it.isWhitespace() }) return null
+        if (!Patterns.WEB_URL.matcher(trimmed).matches()) return null
+        val withScheme = if (trimmed.contains("://")) trimmed else "https://$trimmed"
+        val uri = runCatching { Uri.parse(withScheme) }.getOrNull() ?: return null
+        val scheme = uri.scheme?.lowercase() ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        if (uri.host.isNullOrEmpty()) return null
+        return uri
     }
 
     /**

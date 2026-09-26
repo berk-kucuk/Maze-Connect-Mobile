@@ -23,7 +23,7 @@
     <string name="update_unreadable">The update server sent something unreadable.</string>
     <string name="open_on_phone_notification_text">Tap to copy to your clipboard.</string>
     <string name="open_on_phone_copied">Copied from your computer.</string>
-    <string name="widget_description">The detailed dashboard: hostname, four meters, and hardening/services/network as numbers.</string>
+    <string name="widget_description">Your computer at a glance: four readings as tiles. Resize it freely — it rearranges to fit.</string>
     <string name="widget_no_computer">No reading yet</string>
     <string name="widget_computer">Computer</string>
     <string name="widget_open_to_connect">Open Maze Connect and pair to see your computer here.</string>
@@ -31,10 +31,10 @@
     <string name="widget_age_minutes">%1$d min ago</string>
     <string name="widget_age_hours">%1$d h ago</string>
     <string name="widget_age_old">over a day ago</string>
-    <string name="widget_mini_description">The smallest size: hostname and two meters.</string>
-    <string name="widget_tile_description">A square: two meters with the detail beside them — temperature, used of total.</string>
-    <string name="widget_detailed_description">The fullest reading: four meters, each with its own line for the computer\u2019s detail, plus hardening/services/network.</string>
-    <string name="widget_compact_description">A small glance at your computer: hostname and three meters, in one row.</string>
+    <string name="widget_mini_description">The smallest: your computer\u2019s name and two readings.</string>
+    <string name="widget_tile_description">A square: two readings, each with its detail — temperature, used of total.</string>
+    <string name="widget_detailed_description">Every reading with the computer\u2019s detail beside it, plus hardening, services and network.</string>
+    <string name="widget_compact_description">A slim strip: name, freshness and three meters in one row.</string>
     <string name="widget_stat_hardening">Hardening</string>
     <string name="widget_stat_services">Services</string>
     <string name="widget_stat_network">Network</string>
@@ -53,4 +53,9 @@
     <string name="guard_no_computer">No paired computer is reachable right now.</string>
     <string name="media_channel_name">Computer media</string>
     <string name="media_channel_description">Play, pause and skip what is playing on your computer, from the lock screen and the notification shade.</string>
+    <string name="find_channel_name">Find my phone</string>
+    <string name="find_channel_description">Shown while a computer is ringing this phone so you can find it.</string>
+    <string name="find_notification_title">Ringing — your computer is looking for this phone</string>
+    <string name="find_notification_text">%1$s asked this phone to ring. Tap to stop.</string>
+    <string name="find_notification_stop">Found it</string>
 </resources>

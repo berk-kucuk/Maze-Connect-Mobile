@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import com.mazeconnect.app.MainActivity
@@ -13,140 +14,107 @@ import com.mazeconnect.app.R
 import com.mazeconnect.core.protocol.SystemStatus
 
 /**
- * A home-screen dashboard, in three sizes: 2x1, 4x1 and 4x2.
+ * The computer's dashboard on the home screen — one widget that fits whatever
+ * space it is given.
  *
- * The widget is rendered by the launcher, in the launcher's process, whether
- * or not this app is running — so it cannot ask the link for anything. It
- * draws the **last snapshot the app saw**, which [WidgetSnapshotStore] wrote
- * to disk, and says how old that is.
+ * Every earlier version drew one fixed layout per provider and declared a
+ * size for it, and every round of fixes moved the same problem around: the
+ * layout was taller than its cells on one phone and clipped, or shorter on
+ * another and left a slab of empty card. A launcher cell simply has no fixed
+ * size. So each instance now carries several layouts, each measured for a
+ * range (see the [Style] sizes and the comment at the top of each layout
+ * file), and shows whichever fits — re-chosen on rotation and on resize. See
+ * [WidgetSizing] for how the choice is made.
  *
- * Saying the age is the whole point. A widget showing month-old CPU figures
- * with no timestamp is worse than one showing nothing: it looks live, and
- * someone glancing at it would believe it. So a stale reading is labelled,
- * and one with no reading at all says what to do instead.
+ * The five providers are the same widget with a different starting size, so
+ * the picker offers a sensible first placement for each footprint:
+ * Mini 2×1, Square 2×2, Strip 4×1, Grid 4×2, Detailed 4×2. The only difference
+ * that survives a resize is the largest layout: Detailed keeps its list with
+ * the computer's detail strings and stat cells, the rest use the tile grid.
  *
- * There used to be a fourth, 4x4 size with six meters. It took up half a
- * home screen for detail nobody could read any faster than the 4x2's four
- * meters plus its three stat cells — a taller widget is not automatically a
- * more useful one. Removed rather than kept as an option nobody would pick.
- *
- * Each placed instance draws whichever computer [WidgetDeviceConfig] has it
- * configured for — set once, via [DashboardWidgetConfigureActivity], when
- * the widget is added. An instance placed before that existed falls back to
- * whichever computer's reading is freshest, same as the single shared file
- * this used to read before there was more than one computer to pick from.
+ * The widget is rendered in the launcher's process, whether or not this app
+ * is running, so it cannot ask the link for anything. It draws the **last
+ * snapshot the app saw** ([WidgetSnapshotStore]) and always says how old it
+ * is — a month-old reading with no timestamp looks live, which is worse than
+ * showing nothing.
  */
 open class DashboardWidget : AppWidgetProvider() {
 
-    /** How many of the stored meters this size has room to draw. */
-    protected open val meterSlots: Int get() = 4
-
-    protected open val layout: Int get() = R.layout.widget_dashboard
-
-    /** The three-cell hardening/services/network row. Only the sizes with
-     *  room for it declare true. */
-    protected open val showStatCells: Boolean get() = true
-
     /**
-     * Whether this layout has a place for the computer's detail string.
+     * One layout and what it has room for.
      *
-     * The wide row (label | bar | value) has no room for "17.5 / 31.3 GiB"
-     * beside a 40dp value, so the sizes built on it leave the field out
-     * entirely rather than abbreviate it into nothing. The stacked sizes
-     * give it its own line and set this true; render() then fills it in
-     * without either of them knowing which size it is drawing.
+     * The sizes are measured against the layout XML, not chosen: change a
+     * layout's padding or type size and its size here has to be re-measured,
+     * or the widget will clip on the grid it was just fixed for.
      */
-    protected open val hasDetail: Boolean get() = false
+    enum class Style(
+        val layout: Int,
+        val widthDp: Float,
+        val heightDp: Float,
+        /** How many readings it draws. */
+        val slots: Int,
+        /** Whether it has a line for the computer's detail ("45 °C"). */
+        val detail: Boolean,
+        /** Whether it has the hardening/services/network cells. */
+        val stats: Boolean,
+        /** Narrow label column: "RAM" rather than "Memory". */
+        val shortLabels: Boolean,
+    ) {
+        MINI(R.layout.widget_mini, 110f, 48f, 2, false, false, true),
+        COMPACT(R.layout.widget_compact, 180f, 50f, 3, false, false, true),
+        TILE(R.layout.widget_tile, 110f, 122f, 2, true, false, false),
+        DASHBOARD(R.layout.widget_dashboard, 180f, 116f, 4, false, false, true),
+        GRID(R.layout.widget_grid, 180f, 192f, 4, true, false, false),
+        DETAILED(R.layout.widget_detailed, 180f, 182f, 4, true, true, false),
+    }
 
-    /**
-     * Readings this size leaves out.
-     *
-     * Only the 4x1 does, and only because it has to: one cell on a typical
-     * home screen leaves about 80dp once the launcher takes its own margin,
-     * and the four meters, the header and the three stat cells come to 91dp.
-     * Disk is the one dropped because it is the slowest to change of the
-     * four — a disk that was 5% full a minute ago still is — so it is the
-     * one a glance loses least by not having. Every larger size shows it.
-     *
-     * Matched on the computer's key first and its label second: the key is
-     * the stable identifier, but it comes from the computer's own helper and
-     * this app does not get to assume it is there.
-     */
-    protected open val hiddenMetricKeys: Set<String> get() = setOf("disk")
+    /** What this provider shows when it has room for the most. */
+    protected open val largeStyle: Style get() = Style.GRID
 
-    override fun onUpdate(
+    /** Drawn before the launcher has reported a size (API 28-30 only). */
+    protected open val defaultStyle: Style get() = Style.GRID
+
+    override fun onUpdate(context: Context, manager: AppWidgetManager, widgetIds: IntArray) {
+        for (id in widgetIds) manager.updateAppWidget(id, render(context, this, id))
+    }
+
+    /** A resize, or the launcher reporting sizes for the first time. On API
+     *  31+ the launcher re-picks by itself; below that this is how it hears. */
+    override fun onAppWidgetOptionsChanged(
         context: Context,
         manager: AppWidgetManager,
-        widgetIds: IntArray,
+        appWidgetId: Int,
+        newOptions: Bundle,
     ) {
-        for (id in widgetIds) manager.updateAppWidget(id, render(context, this, id))
+        manager.updateAppWidget(appWidgetId, render(context, this, appWidgetId))
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         for (id in appWidgetIds) WidgetDeviceConfig.clear(context, id)
     }
 
-    /**
-     * The 2x1 variant: the smallest size, but still two real meters —
-     * hostname alone answered a question nobody was asking. No stat cells
-     * and no separate age line at this height; see widget_mini.xml.
-     */
     class Mini : DashboardWidget() {
-        override val hiddenMetricKeys: Set<String> get() = emptySet()
-        override val meterSlots: Int get() = 2
-        override val layout: Int get() = R.layout.widget_mini
-        override val showStatCells: Boolean get() = false
+        override val defaultStyle: Style get() = Style.MINI
     }
 
-    /**
-     * The 4x1 variant. Three meters laid out across instead of down — see
-     * widget_compact.xml, which reuses this class's ids exactly so no code
-     * here has to know which size it is filling in.
-     */
     class Compact : DashboardWidget() {
-        override val hiddenMetricKeys: Set<String> get() = emptySet()
-        override val meterSlots: Int get() = 3
-        override val layout: Int get() = R.layout.widget_compact
-        override val showStatCells: Boolean get() = false
+        override val defaultStyle: Style get() = Style.COMPACT
     }
 
-    /**
-     * The 4x3 variant: the same four readings as the 4x2, with room to say
-     * what they mean.
-     *
-     * Two lines per metric — label, value and the computer's full detail on
-     * one, the bar at full width beneath. The 4x2 has to choose between the
-     * bar and the detail; this size does not have to choose.
-     */
-    class Detailed : DashboardWidget() {
-        override val hiddenMetricKeys: Set<String> get() = emptySet()
-        override val meterSlots: Int get() = 4
-        override val layout: Int get() = R.layout.widget_detailed
-        override val showStatCells: Boolean get() = true
-        override val hasDetail: Boolean get() = true
-    }
-
-    /**
-     * The 2x2 square: two readings with their detail, in the footprint of
-     * four app icons.
-     *
-     * Uses the stacked row rather than the wide one because at this width
-     * three columns leave the bar narrower than the padding around it.
-     */
     class Tile : DashboardWidget() {
-        override val hiddenMetricKeys: Set<String> get() = emptySet()
-        override val meterSlots: Int get() = 2
-        override val layout: Int get() = R.layout.widget_tile
-        override val showStatCells: Boolean get() = false
-        override val hasDetail: Boolean get() = true
+        override val defaultStyle: Style get() = Style.TILE
+    }
+
+    class Detailed : DashboardWidget() {
+        override val largeStyle: Style get() = Style.DETAILED
+        override val defaultStyle: Style get() = Style.DETAILED
     }
 
     companion object {
 
         // Addressed individually rather than through `<include>`s of one row:
         // RemoteViews resolves ids across the whole tree with no per-include
-        // scoping, so shared ids meant only the first row was ever filled in
-        // and the widget showed a single bar.
+        // scoping, so shared ids meant only the first row was ever filled in.
         private val LABELS = intArrayOf(
             R.id.meter_label_1, R.id.meter_label_2, R.id.meter_label_3, R.id.meter_label_4,
         )
@@ -160,77 +128,76 @@ open class DashboardWidget : AppWidgetProvider() {
             R.id.meter_row_1, R.id.meter_row_2, R.id.meter_row_3, R.id.meter_row_4,
         )
         private val DETAILS = intArrayOf(
-            R.id.meter_detail_1, R.id.meter_detail_2,
-            R.id.meter_detail_3, R.id.meter_detail_4,
+            R.id.meter_detail_1, R.id.meter_detail_2, R.id.meter_detail_3, R.id.meter_detail_4,
         )
 
-        // One instance per registered provider, used only to read its size
-        // (layout/slots/flags) by class — never through the Android
-        // lifecycle. The single source of truth for "what does each size
-        // look like" is the class hierarchy above; refresh() used to repeat
-        // those numbers by hand next to each redraw() call, and the two
-        // copies had already drifted apart — the compact widget's live
-        // updates were drawing one meter instead of the three its own layout
-        // has room for.
-        private val SIZES: List<DashboardWidget> =
+        /** Every layout a provider can show, largest class last. */
+        internal fun layoutsFor(large: Style): List<SizedLayout<Style>> =
+            listOf(Style.MINI, Style.COMPACT, Style.TILE, Style.DASHBOARD, large)
+                .map { SizedLayout(it, it.widthDp, it.heightDp) }
+
+        // One instance per registered provider, used only to read its
+        // settings by class — never through the Android lifecycle.
+        private val PROVIDERS: List<DashboardWidget> =
             listOf(Mini(), Tile(), Compact(), DashboardWidget(), Detailed())
 
-        /**
-         * Redraw every placed widget, of every size.
-         *
-         * Called when a new snapshot lands, so the widget follows the app
-         * rather than waiting out the system's update period — which is
-         * measured in tens of minutes and would make it look broken.
-         */
+        /** Redraw every placed widget. Called when a new snapshot lands. */
         fun refresh(context: Context) {
             val manager = AppWidgetManager.getInstance(context) ?: return
-            for (size in SIZES) redraw(context, manager, size)
+            for (provider in PROVIDERS) {
+                val ids = manager.getAppWidgetIds(ComponentName(context, provider.javaClass))
+                for (id in ids) manager.updateAppWidget(id, render(context, provider, id))
+            }
         }
 
-        /** Redraw one instance right after it is configured — the system
-         *  also does this on initial placement, but not on every launcher's
-         *  re-edit flow, so this makes the pick feel immediate either way. */
+        /** Redraw one instance right after it is configured. */
         fun refreshOne(context: Context, appWidgetId: Int) {
             val manager = AppWidgetManager.getInstance(context) ?: return
             val providerClass = manager.getAppWidgetInfo(appWidgetId)?.provider?.className
-            val size = SIZES.firstOrNull { it.javaClass.name == providerClass } ?: return
-            manager.updateAppWidget(appWidgetId, render(context, size, appWidgetId))
+            val provider = PROVIDERS.firstOrNull { it.javaClass.name == providerClass } ?: return
+            manager.updateAppWidget(appWidgetId, render(context, provider, appWidgetId))
         }
 
-        private fun redraw(context: Context, manager: AppWidgetManager, size: DashboardWidget) {
-            val ids = manager.getAppWidgetIds(ComponentName(context, size.javaClass))
-            for (id in ids) manager.updateAppWidget(id, render(context, size, id))
-        }
-
-        private fun render(context: Context, size: DashboardWidget, appWidgetId: Int): RemoteViews {
-            val views = RemoteViews(context.packageName, size.layout)
+        private fun render(context: Context, provider: DashboardWidget, appWidgetId: Int): RemoteViews {
+            // Read once, drawn into every layout: the choice between them is
+            // the launcher's, and they must all show the same reading.
             val store = WidgetSnapshotStore(context)
             val deviceId = WidgetDeviceConfig.deviceIdFor(context, appWidgetId)
                 ?: store.mostRecentDeviceId()
+            val stored = deviceId?.let { store.load(it) }
+            val open = openApp(context, appWidgetId, deviceId)
 
-            // Tapping anywhere opens the app, on this widget's computer if
-            // it has one configured. A widget that does nothing when
-            // pressed reads as broken.
-            val open = Intent(context, MainActivity::class.java)
+            return WidgetSizing.build(
+                context, appWidgetId, layoutsFor(provider.largeStyle), provider.defaultStyle,
+            ) { style -> draw(context, style, stored, open) }
+        }
+
+        private fun openApp(context: Context, appWidgetId: Int, deviceId: String?): PendingIntent {
+            // Tapping anywhere opens the app, on this widget's computer. A
+            // widget that does nothing when pressed reads as broken.
+            val intent = Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 .apply { deviceId?.let { putExtra(MainActivity.EXTRA_OPEN_DEVICE_ID, it) } }
-            views.setOnClickPendingIntent(
-                R.id.widget_host,
-                PendingIntent.getActivity(
-                    context, appWidgetId, open,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                ),
+            return PendingIntent.getActivity(
+                context, appWidgetId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
+        }
 
-            val stored = deviceId?.let { store.load(it) }
+        private fun draw(
+            context: Context,
+            style: Style,
+            stored: Pair<SystemStatus, Long>?,
+            open: PendingIntent,
+        ): RemoteViews {
+            val views = RemoteViews(context.packageName, style.layout)
+            views.setOnClickPendingIntent(android.R.id.background, open)
+
             if (stored == null) {
-                views.setTextViewText(
-                    R.id.widget_host,
-                    context.getString(R.string.widget_no_computer),
-                )
+                views.setTextViewText(R.id.widget_host, context.getString(R.string.widget_no_computer))
                 views.setTextViewText(R.id.widget_age, "")
-                for (i in 0 until size.meterSlots) views.setViewVisibility(ROWS[i], View.GONE)
-                if (size.showStatCells) views.setViewVisibility(R.id.widget_stats, View.GONE)
+                views.setViewVisibility(R.id.widget_meters, View.GONE)
+                if (style.stats) views.setViewVisibility(R.id.widget_stats, View.GONE)
                 views.setViewVisibility(R.id.widget_hint, View.VISIBLE)
                 views.setTextViewText(
                     R.id.widget_hint,
@@ -241,33 +208,31 @@ open class DashboardWidget : AppWidgetProvider() {
 
             val (status, savedAtMillis) = stored
             views.setViewVisibility(R.id.widget_hint, View.GONE)
+            views.setViewVisibility(R.id.widget_meters, View.VISIBLE)
             views.setTextViewText(
                 R.id.widget_host,
                 status.hostname.ifEmpty { context.getString(R.string.widget_computer) },
             )
             views.setTextViewText(R.id.widget_age, ageLabel(context, savedAtMillis))
 
-            val shown = status.metrics.filterNot { metric ->
-                size.hiddenMetricKeys.any {
-                    it.equals(metric.key, ignoreCase = true) ||
-                        it.equals(metric.label, ignoreCase = true)
-                }
-            }
-            for (i in 0 until size.meterSlots) {
-                val metric = shown.getOrNull(i)
+            for (i in 0 until style.slots) {
+                val metric = status.metrics.getOrNull(i)
                 if (metric == null) {
                     views.setViewVisibility(ROWS[i], View.GONE)
                     continue
                 }
+                val percent = metric.percent.toInt().coerceIn(0, 100)
                 views.setViewVisibility(ROWS[i], View.VISIBLE)
-                views.setTextViewText(LABELS[i], metric.label)
-                views.setProgressBar(BARS[i], 100, metric.percent.toInt(), false)
-                views.setTextViewText(VALUES[i], "${metric.percent.toInt()}%")
-                if (size.hasDetail) {
-                    // Hidden rather than left blank when the computer sends
-                    // none: an empty view still takes its line, and a row
-                    // with a gap where a number should be reads as a reading
-                    // that failed rather than one that was never offered.
+                views.setTextViewText(
+                    LABELS[i],
+                    if (style.shortLabels) shortLabel(metric.key, metric.label) else metric.label,
+                )
+                views.setProgressBar(BARS[i], 100, percent, false)
+                views.setTextViewText(VALUES[i], "$percent%")
+                if (style.detail) {
+                    // Gone rather than blank when the computer sends none: an
+                    // empty line where a number should be reads as a reading
+                    // that failed, not one that was never offered.
                     if (metric.detail.isEmpty()) {
                         views.setViewVisibility(DETAILS[i], View.GONE)
                     } else {
@@ -277,10 +242,7 @@ open class DashboardWidget : AppWidgetProvider() {
                 }
             }
 
-            // Only the 4x2 has room for these: hardening score, security
-            // services and network, as three short numbers rather than one
-            // folded sentence.
-            if (size.showStatCells) {
+            if (style.stats) {
                 views.setViewVisibility(R.id.widget_stats, View.VISIBLE)
                 views.setTextViewText(
                     R.id.stat_hardening_value,
@@ -305,11 +267,29 @@ open class DashboardWidget : AppWidgetProvider() {
         }
 
         /**
-         * How old the reading is, in words.
-         *
-         * Deliberately coarse. Second-level precision would imply the widget
-         * is live, and it is not — it is the last thing the app happened to
-         * see.
+         * A label for a narrow column. The computer's own label is kept
+         * whenever it is already short; the common long ones are abbreviated
+         * the way every system monitor does, so "Memory" does not ellipsize
+         * to "Mem…" beside its bar.
+         */
+        internal fun shortLabel(key: String, label: String): String {
+            val probe = "$key $label".lowercase()
+            return when {
+                label.length <= 5 -> label
+                "cpu" in probe || "processor" in probe -> "CPU"
+                "swap" in probe -> "Swap"
+                "mem" in probe || "ram" in probe -> "RAM"
+                "disk" in probe || "storage" in probe || "root" in probe -> "Disk"
+                "temp" in probe -> "Temp"
+                "gpu" in probe -> "GPU"
+                "batt" in probe -> "Batt"
+                else -> label.take(5)
+            }
+        }
+
+        /**
+         * How old the reading is, in words. Deliberately coarse: second-level
+         * precision would imply the widget is live, and it is not.
          */
         private fun ageLabel(context: Context, savedAtMillis: Long): String {
             val minutes = (System.currentTimeMillis() - savedAtMillis) / 60_000

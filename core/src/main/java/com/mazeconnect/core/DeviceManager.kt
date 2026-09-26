@@ -5,6 +5,7 @@ import android.util.Log
 import com.mazeconnect.core.crypto.Fingerprint
 import com.mazeconnect.core.crypto.Sas
 import com.mazeconnect.core.discovery.Beacon
+import com.mazeconnect.core.device.PhoneStatusCollector
 import com.mazeconnect.core.discovery.DiscoveredDevice
 import com.mazeconnect.core.filetransfer.FileTransferReceiver
 import com.mazeconnect.core.keystore.AndroidKeyStoreManager
@@ -209,6 +210,15 @@ sealed interface DeviceEvent {
      * there, as it always did.
      */
     data class PairingRequested(val deviceId: String, val deviceName: String) : DeviceEvent
+
+    /**
+     * A computer asked this phone to start ([ring] true) or stop ringing.
+     * Making the noise is the service's job — see FindPhoneRinger — and it
+     * reports back through [DeviceManager.reportRinging] when the person
+     * holding the phone silences it.
+     */
+    data class FindPhone(val deviceId: String, val deviceName: String, val ring: Boolean) :
+        DeviceEvent
 }
 
 /**
@@ -354,6 +364,29 @@ class DeviceManager(
     )
 
     val discovered: StateFlow<List<DiscoveredDevice>> get() = beacon.devices
+
+    /**
+     * Whether this phone answers a computer asking for its battery, storage
+     * and network. The phone owner's switch, on top of the per-device
+     * capability: it is this phone's information, so this phone decides.
+     * A refusal is answered out loud, never with silence.
+     */
+    @Volatile var phoneStatusSharing: Boolean = true
+
+    /** Whether a paired computer may make this phone ring. */
+    @Volatile var findPhoneAllowed: Boolean = true
+
+    private val phoneStatus by lazy { PhoneStatusCollector(appContext) }
+
+    /** The last reading sent, and when — a computer polling fast gets the
+     *  same object for a couple of seconds instead of re-querying every
+     *  system service each time. */
+    @Volatile private var lastReading: Pair<Long, org.json.JSONObject>? = null
+
+    /** Computers that asked this phone to ring and are owed a "stopped". */
+    private val ringRequesters = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    )
 
     var deviceId: String = ""
         private set
@@ -850,6 +883,16 @@ class DeviceManager(
 
             MessageType.PAIR_RESULT -> {
                 val pending = _pendingPairing.value ?: return
+                // Only the device being paired may answer for it. Without
+                // this, any other peer on the network — unpaired, allowed to
+                // send pairing messages precisely so pairing can happen —
+                // could send "accepted" while the user was pairing with
+                // someone else, pin that pairing without its real answer, and
+                // have *its own* link marked trusted by finalizePairing().
+                if (link.trusted || pending.deviceId != link.deviceId) {
+                    link.connection.close("pair result from a device not being paired")
+                    return
+                }
                 val accepted = message.boolean("accepted")
                 if (!accepted) {
                     _pendingPairing.value = null
@@ -905,6 +948,10 @@ class DeviceManager(
 
             MessageType.MEDIA_STATE -> handleMediaState(link, message)
 
+            MessageType.PHONE_STATUS_REQUEST -> handlePhoneStatusRequest(link)
+
+            MessageType.FIND_PHONE -> handleFindPhone(link, message)
+
             MessageType.FILE_CANCEL, MessageType.FILE_REJECT -> {
                 val id = message.integer("transferId", 0xFFFFFFFFL) ?: return
                 // Could be either direction: a file we were receiving, or one
@@ -949,7 +996,11 @@ class DeviceManager(
      */
     private fun handleOpenOnPhone(link: Link, message: Message) {
         if (!allowed(link, Capability.OPEN_ON_PHONE)) return
-        val text = message.string("text", Limits.MAX_OPEN_TEXT_CHARS) ?: return
+        // text(), not string(): a clipboard is rarely one line, and string()
+        // refused every newline — so multi-line text sent from the computer
+        // vanished without a word.
+        val text = message.text("text", Limits.MAX_OPEN_TEXT_CHARS)?.takeIf { it.isNotBlank() }
+            ?: return
         emit(DeviceEvent.OpenOnPhone(link.deviceId, text))
     }
 
@@ -1136,7 +1187,7 @@ class DeviceManager(
             Log.w(TAG, "pairResponse with no pairing in progress")
             return
         }
-        if (!pending.weInitiated) {
+        if (link.trusted || !pending.weInitiated || pending.deviceId != link.deviceId) {
             link.connection.close("unexpected pair response")
             return
         }
@@ -1724,6 +1775,10 @@ class DeviceManager(
      */
     private fun forgetPendingWork(deviceId: String) {
         statusAwaiting.remove(deviceId)
+        // A ring outlives the link on purpose — a lost phone keeps ringing
+        // while its Wi-Fi drops in and out — but there is nobody left to
+        // tell when it stops.
+        ringRequesters.remove(deviceId)
         // Only this device's entries — commandRuns and aiRequestIds are
         // shared across every connected computer, and clearing the whole
         // map here used to wipe another, still-connected computer's
@@ -1753,6 +1808,112 @@ class DeviceManager(
             updateTransfer(id) { it.copy(done = true, error = "the computer disconnected") }
         }
         if (_fileOffer.value?.deviceId == deviceId) _fileOffer.value = null
+    }
+
+    // ---- This phone, as the computer sees it ------------------------------
+
+    /**
+     * A computer wants this phone's reading.
+     *
+     * Answered either way. A refusal says why, so the computer's dashboard
+     * can tell "sharing is off" from "the phone is slow" — the same rule the
+     * computer follows for every request of its own.
+     */
+    private fun handlePhoneStatusRequest(link: Link) {
+        val refusal = when {
+            !allowed(link, Capability.PHONE_STATUS) ->
+                "this phone has status sharing switched off for your computer"
+            !phoneStatusSharing -> "this phone has status sharing switched off"
+            else -> null
+        }
+        if (refusal != null) {
+            scope.launch {
+                link.connection.send(
+                    Message.phoneStatusUnavailable(link.connection.nextCounter(), refusal)
+                )
+            }
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            val cached = lastReading?.takeIf { now - it.first < PHONE_STATUS_CACHE_MS }?.second
+            val reading = cached ?: runCatching { phoneStatus.collect().toJson() }
+                .onFailure { Log.w(TAG, "could not read this phone's status", it) }
+                .getOrNull()
+                ?.also { lastReading = now to it }
+            link.connection.send(
+                if (reading != null) {
+                    Message.phoneStatus(link.connection.nextCounter(), reading)
+                } else {
+                    Message.phoneStatusUnavailable(
+                        link.connection.nextCounter(), "this phone could not read its status",
+                    )
+                }
+            )
+        }
+    }
+
+    private fun handleFindPhone(link: Link, message: Message) {
+        val ring = message.boolean("ring")
+        val refusal = when {
+            !allowed(link, Capability.FIND_PHONE) ->
+                "this phone does not let your computer ring it"
+            ring && !findPhoneAllowed -> "ringing is switched off on this phone"
+            else -> null
+        }
+        if (refusal != null) {
+            scope.launch {
+                link.connection.send(
+                    Message.findPhoneResult(link.connection.nextCounter(), false, refusal)
+                )
+            }
+            return
+        }
+        // A stop is answered below; the requester is not owed a second one.
+        if (ring) ringRequesters.add(link.deviceId) else ringRequesters.remove(link.deviceId)
+        emit(DeviceEvent.FindPhone(link.deviceId, link.deviceName, ring))
+        scope.launch {
+            link.connection.send(Message.findPhoneResult(link.connection.nextCounter(), ring))
+        }
+    }
+
+    /**
+     * The ringing stopped here — someone tapped "Found it", or it timed out,
+     * or it could not start. Every computer that rang it is told, so none of
+     * them keeps offering "Stop ringing" for a phone that is already quiet.
+     */
+    fun reportRinging(ringing: Boolean, error: String? = null) {
+        if (ringing) return
+        val owed = ringRequesters.toList()
+        ringRequesters.clear()
+        for (deviceId in owed) {
+            val link = links[deviceId] ?: continue
+            if (!allowed(link, Capability.FIND_PHONE)) continue
+            scope.launch {
+                link.connection.send(
+                    Message.findPhoneResult(link.connection.nextCounter(), false, error)
+                )
+            }
+        }
+    }
+
+    /**
+     * Send text or a link to one computer's clipboard.
+     *
+     * Refused here, before anything is sent, for exactly what the computer
+     * would refuse: over the bound, or carrying control characters other than
+     * ordinary whitespace. A silent drop on the far side would look like a
+     * send that worked.
+     */
+    fun shareText(targetDeviceId: String, text: String): Boolean {
+        val link = links[targetDeviceId] ?: return false
+        if (!allowed(link, Capability.SHARE_TEXT)) return false
+        if (text.isBlank() || text.length > Limits.MAX_SHARE_TEXT_CHARS) return false
+        if (!Message.isAllowedText(text)) return false
+        scope.launch {
+            link.connection.send(Message.shareText(link.connection.nextCounter(), text))
+        }
+        return true
     }
 
     // ---- Media -------------------------------------------------------------
@@ -2120,6 +2281,9 @@ class DeviceManager(
         /** How often to read the computer for the widget's benefit. Slow on
          *  purpose — the widget is glanced at, not watched. */
         private const val BACKGROUND_STATUS_INTERVAL_MS = 60_000L
+
+        /** How long one phone reading is reused for. */
+        private const val PHONE_STATUS_CACHE_MS = 2_000L
 
         /** Comfortably under the data-frame cap once the 4-byte transfer id
          *  is added. Matches the desktop's kSendChunkSize. */

@@ -44,6 +44,16 @@ class ControlsWidget : AppWidgetProvider() {
         for (id in appWidgetIds) WidgetDeviceConfig.clear(context, id)
     }
 
+    /** A resize: pick the layout for the new size (see [WidgetSizing]). */
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        manager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: android.os.Bundle,
+    ) {
+        manager.updateAppWidget(appWidgetId, render(context, appWidgetId))
+    }
+
     // No onReceive: a press opens GuardConfirmActivity instead of acting
     // here. A widget press has no way to report anything — if the computer is
     // unreachable the cell simply does not change, which is indistinguishable
@@ -86,16 +96,31 @@ class ControlsWidget : AppWidgetProvider() {
             manager.updateAppWidget(appWidgetId, render(context, appWidgetId))
         }
 
-        private fun render(context: Context, appWidgetId: Int): RemoteViews {
-            val views = RemoteViews(context.packageName, R.layout.widget_controls)
+        /**
+         * Two layouts: the normal one with the computer's name above the
+         * cells, and a single row for a short cell (a 4x1 in landscape, a
+         * dense grid). Sizes measured against each layout — see the comment
+         * at the top of the two XML files.
+         */
+        private val LAYOUTS = listOf(
+            SizedLayout(R.layout.widget_controls_slim, 250f, 46f),
+            SizedLayout(R.layout.widget_controls, 180f, 94f),
+        )
+
+        private fun render(context: Context, appWidgetId: Int): RemoteViews =
+            WidgetSizing.build(context, appWidgetId, LAYOUTS, R.layout.widget_controls) { layout ->
+                draw(context, appWidgetId, layout)
+            }
+
+        private fun draw(context: Context, appWidgetId: Int, layout: Int): RemoteViews {
+            val views = RemoteViews(context.packageName, layout)
             val store = WidgetSnapshotStore(context)
             val deviceId = WidgetDeviceConfig.deviceIdFor(context, appWidgetId)
                 ?: store.mostRecentDeviceId()
             val stored = deviceId?.let { store.load(it) }
             val guard = deviceId?.let { store.guardStates(it) } ?: emptyMap()
 
-            views.setOnClickPendingIntent(
-                R.id.widget_host,
+            val openApp =
                 PendingIntent.getActivity(
                     context, appWidgetId,
                     Intent(context, com.mazeconnect.app.MainActivity::class.java)
@@ -106,8 +131,11 @@ class ControlsWidget : AppWidgetProvider() {
                             }
                         },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                ),
-            )
+                )
+            // The whole card opens the app; each cell's own intent, set
+            // below, takes precedence inside the cell.
+            views.setOnClickPendingIntent(android.R.id.background, openApp)
+            views.setOnClickPendingIntent(R.id.widget_host, openApp)
 
             views.setTextViewText(
                 R.id.widget_host,

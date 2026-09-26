@@ -1,32 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  updatePeriodMillis is 0 on purpose: the system's own period has a 30-minute
-  floor and wakes the device to honour it. This widget has nothing to fetch on
-  a schedule — it draws whatever the app last saw — so it is redrawn when a
-  snapshot arrives instead, and costs nothing in between.
+  Dashboard with detail strings and stat cells, placed at 4x2 (Detailed).
 
-  minHeight is the smallest this widget may be, NOT how tall its content is.
-  The launcher divides it by the cell height and rounds up, so raising it to
-  the measured content height — which reads like the careful thing to do —
-  pushed this provider from two rows of cells to three and made the widget
-  half again as tall as it needed to be. The content is free to be taller
-  than this: the cells actually allocated are.
+  The sizes follow Android's own rule for n cells, 70 x n - 30 dp, so the
+  launcher places it on exactly the cells named by targetCell*: 4x2.
+  The widget itself adapts to whatever it is then given — rotated, resized,
+  or on a grid with taller cells — by picking among layouts measured for
+  each range (WidgetSizing). That is why minResize can go down to one row:
+  shrinking it switches to a layout made for that height instead of
+  clipping this one.
 
-  minResizeWidth/Height are stated rather than left to default. Without them
-  the smallest a widget can be dragged is its minWidth/minHeight, so there is
-  no way to take back space the launcher granted.
+  updatePeriodMillis is 0: it is redrawn when the app receives something,
+  never on a timer that wakes the phone.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="UnusedAttribute"
     android:minWidth="250dp"
-    android:minHeight="168dp"
-    android:minResizeWidth="200dp"
-    android:minResizeHeight="150dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="40dp"
     android:targetCellWidth="4"
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
     android:configure="com.mazeconnect.app.widget.DashboardWidgetConfigureActivity"
     android:initialLayout="@layout/widget_detailed"
-    android:previewLayout="@layout/widget_detailed"
+    android:previewLayout="@layout/widget_preview_detailed"
     android:description="@string/widget_detailed_description"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />

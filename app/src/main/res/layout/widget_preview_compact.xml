@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from widget_compact.xml with sample readings: the widget picker's preview.
+     Never drawn on a home screen, so the numbers cannot be mistaken for live
+     ones. Regenerate when the source layout changes. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="HardcodedText"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_background"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="6dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_host"
+            style="@style/WidgetText.Host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="13sp"
+            android:text="msi" />
+        <TextView
+            android:id="@+id/widget_age" android:text="just now"
+            style="@style/WidgetText.Age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_meters"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:id="@+id/meter_row_1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="10dp"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView android:id="@+id/meter_label_1" android:text="CPU" style="@style/WidgetText.Label"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+                <TextView android:id="@+id/meter_value_1" android:text="23%" style="@style/WidgetText.Value"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/meter_bar_1" android:progress="23" style="@style/WidgetBar"
+                android:layout_width="match_parent" android:layout_height="3dp"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/meter_row_2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="10dp"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView android:id="@+id/meter_label_2" android:text="RAM" style="@style/WidgetText.Label"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+                <TextView android:id="@+id/meter_value_2" android:text="41%" style="@style/WidgetText.Value"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/meter_bar_2" android:progress="41" style="@style/WidgetBar"
+                android:layout_width="match_parent" android:layout_height="3dp"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/meter_row_3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView android:id="@+id/meter_label_3" android:text="Disk" style="@style/WidgetText.Label"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+                <TextView android:id="@+id/meter_value_3" android:text="58%" style="@style/WidgetText.Value"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/meter_bar_3" android:progress="58" style="@style/WidgetBar"
+                android:layout_width="match_parent" android:layout_height="3dp"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_hint"
+        style="@style/WidgetText.Hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>

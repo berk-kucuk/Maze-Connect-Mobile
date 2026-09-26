@@ -30,7 +30,17 @@ enum class Capability(val wire: String) {
 
     /** See the computer's media players and control them: play, pause,
      *  skip, seek, and the player and system volume. */
-    MEDIA("media");
+    MEDIA("media"),
+
+    /** Tell the computer this phone's battery, storage, memory, network and
+     *  ringer — so its dashboard shows the phone rather than itself. */
+    PHONE_STATUS("phoneStatus"),
+
+    /** Let the computer make this phone ring, loudly, even on silent. */
+    FIND_PHONE("findPhone"),
+
+    /** Send text or a link from this phone to the computer's clipboard. */
+    SHARE_TEXT("shareText");
 
     companion object {
         /** Unknown names degrade to null rather than being guessed at. */
@@ -46,7 +56,10 @@ enum class Capability(val wire: String) {
          * Mirrors the desktop client's `supportedCapabilities()`.
          */
         val SUPPORTED: Set<Capability> =
-            setOf(FILE_TRANSFER, SYSTEM_STATUS, COMMANDS, AI, GUARD_CONTROL, OPEN_ON_PHONE, MEDIA)
+            setOf(
+                FILE_TRANSFER, SYSTEM_STATUS, COMMANDS, AI, GUARD_CONTROL, OPEN_ON_PHONE, MEDIA,
+                PHONE_STATUS, FIND_PHONE, SHARE_TEXT,
+            )
 
         /**
          * What a newly paired computer may be asked for: **everything.**

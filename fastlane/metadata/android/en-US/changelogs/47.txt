@@ -1,0 +1,6 @@
+• The computer's dashboard now shows this phone: battery, storage, memory, network, ringer.
+• Find my phone: the computer can ring this phone, even on silent.
+• Share text and links from any app to the computer's clipboard.
+• Widgets adapt to the size they are given — no more clipped or half-empty widgets.
+• New navigation: five fixed tabs, the rest under More.
+• Security: a pairing answer is only accepted from the device being paired.

@@ -104,8 +104,15 @@ object UpdateChecker {
     /** At most one automatic check a day. A reminder is not news. */
     private const val AUTO_INTERVAL_MS = 24L * 60 * 60 * 1000
 
+    /**
+     * Whether this build has an update reminder at all. False in the F-Droid
+     * build, where F-Droid itself delivers updates — there, nothing below
+     * ever opens a connection.
+     */
+    val available: Boolean get() = com.mazeconnect.app.BuildConfig.UPDATE_CHECKER
+
     fun isEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_ENABLED, true)
+        available && prefs(context).getBoolean(KEY_ENABLED, true)
 
     fun setEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit { putBoolean(KEY_ENABLED, enabled) }
@@ -139,7 +146,8 @@ object UpdateChecker {
      * pressing "check now" is entitled to an answer now — but still posts no
      * notification, because they are already looking at the result.
      */
-    suspend fun checkNow(context: Context): UpdateStatus = check(context, notify = false)
+    suspend fun checkNow(context: Context): UpdateStatus =
+        if (available) check(context, notify = false) else UpdateStatus()
 
     private suspend fun check(context: Context, notify: Boolean): UpdateStatus =
         withContext(Dispatchers.IO) {

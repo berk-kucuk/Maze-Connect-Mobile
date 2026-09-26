@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The widget type scale, in one place.
+
+  Every widget layout is measured against these sizes (see WidgetSizing), so
+  they are not a matter of taste per file: change one here and re-measure the
+  layouts' declared sizes in the widget classes. Font padding is off on every
+  style — with it on, a line is several dp taller than its text, and the
+  arithmetic that keeps a layout inside its cells stops being arithmetic.
+-->
+<resources>
+    <color name="widget_paper">#F2F1EC</color>
+    <color name="widget_dim">#8A8A90</color>
+
+    <style name="WidgetText">
+        <item name="android:textColor">@color/widget_paper</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <!-- Computer name. -->
+    <style name="WidgetText.Host">
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <!-- "2 min ago". Coarse on purpose — see DashboardWidget.ageLabel. -->
+    <style name="WidgetText.Age">
+        <item name="android:textColor">@color/widget_dim</item>
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <style name="WidgetText.Label">
+        <item name="android:textColor">@color/widget_dim</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="WidgetText.Value">
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <!-- The one big number per tile in the grid. -->
+    <style name="WidgetText.Big">
+        <item name="android:textSize">18sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <style name="WidgetText.Detail">
+        <item name="android:textColor">@color/widget_dim</item>
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <style name="WidgetText.Hint">
+        <item name="android:textColor">@color/widget_dim</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="WidgetBar" parent="android:Widget.ProgressBar.Horizontal">
+        <item name="android:indeterminate">false</item>
+        <item name="android:max">100</item>
+        <item name="android:progressDrawable">@drawable/widget_bar</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:maxHeight">20dp</item>
+    </style>
+</resources>

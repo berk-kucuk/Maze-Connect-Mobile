@@ -50,6 +50,7 @@ fun TransfersScreen(
     onClearFinished: () -> Unit,
     onSendFile: (android.net.Uri) -> Unit,
     modifier: Modifier = Modifier,
+    onSendText: (String) -> Unit = {},
 ) {
     val colors = LocalMazeColors.current
     val context = LocalContext.current
@@ -73,6 +74,17 @@ fun TransfersScreen(
                 MazeButton("Clear", onClearFinished, primary = false)
                 Spacer(Modifier.width(8.dp))
             }
+            // Read at the tap, while this app has focus — the only moment
+            // Android lets an app read the clipboard at all, and the only
+            // moment the user has said they want it read.
+            MazeButton("Clipboard", {
+                val clip = context.getSystemService(android.content.ClipboardManager::class.java)
+                    ?.primaryClip
+                val text = clip?.takeIf { it.itemCount > 0 }
+                    ?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                onSendText(text)
+            }, primary = false)
+            Spacer(Modifier.width(8.dp))
             MazeButton("Send", { picker.launch(arrayOf("*/*")) })
         }
 
@@ -88,9 +100,10 @@ fun TransfersScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        text = "Send a file to the computer with the button above, or " +
-                            "send one from the computer — it will ask before anything " +
-                            "is written here.",
+                        text = "Send a file to the computer with the button above — or " +
+                            "anything from another app's Share menu. Clipboard puts what " +
+                            "you copied on the computer's clipboard. Files sent from the " +
+                            "computer always ask before anything is written here.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.dim,
                         textAlign = TextAlign.Center,

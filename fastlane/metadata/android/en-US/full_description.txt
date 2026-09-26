@@ -1,0 +1,28 @@
+<p>Maze Connect links your Android phone with your Linux computer over your own network — no account, no cloud, no server in between. It is built for <a href="https://github.com/berk-kucuk/MazeLinux">Maze Linux</a> and works on any Arch-based desktop running the Maze Connect desktop app.</p>
+
+<p><b>From the phone</b></p>
+<ul>
+<li><b>Dashboard</b> of the computer: CPU, memory, disk, temperatures, security services and hardening score — also in the status bar and as home-screen widgets that fit any size.</li>
+<li><b>Media control</b> for every player on the computer (Spotify, browsers, VLC…), system volume, and lock-screen controls.</li>
+<li><b>Commands</b> the computer's owner has allowed in advance — never a shell.</li>
+<li><b>Killswitches</b> for the computer's camera, microphone, Wi-Fi and Bluetooth.</li>
+<li><b>Files</b> in both directions, and text or links from any app's Share menu straight to the computer's clipboard.</li>
+<li><b>Chat with Maze AI</b> running on your own computer.</li>
+</ul>
+
+<p><b>From the computer</b></p>
+<ul>
+<li>See this phone's battery, storage, network and ringer on the desktop dashboard.</li>
+<li><b>Find my phone:</b> ring it at full volume, even on silent.</li>
+<li>Send links and clipboard text to the phone.</li>
+</ul>
+
+<p><b>Private by design</b></p>
+<ul>
+<li>Mutual TLS 1.3 with pinned keys; pairing is confirmed by comparing a six-digit code on both screens.</li>
+<li>Keys live in the Android Keystore and never leave the phone.</li>
+<li>No location, contacts, storage or phone-state permission. No analytics, no ads, no tracking — the app talks only to computers you paired.</li>
+<li>Every feature can be revoked per device; the phone's owner has separate switches for status sharing and ringing.</li>
+</ul>
+
+<p>Requires the Maze Connect desktop app (Arch/Maze Linux package <i>maze-connect</i>) on the same network.</p>

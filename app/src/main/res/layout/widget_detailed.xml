@@ -1,175 +1,150 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The 4x3 dashboard: the same readings as widget_dashboard, given room.
+  Dashboard, detailed: every reading with the computer's detail on its line,
+  and hardening / services / network as three numbers.
 
-  Two lines per metric instead of one. The wide layout has to abbreviate the
-  computer's detail string to fit beside the value — "17.5 / 31.3 GiB" becomes
-  "17G" or nothing — and that abbreviation is most of the information. Here the
-  label, the value and the whole detail share a line of their own, with the bar
-  on its own line beneath at full width.
+  Measured for 180 x 182 dp (DashboardWidget.DETAILED):
+    10 padding + 16.4 header + 6
+    + 4 x (15.2 line + 3 + 4 bar) + 3 x 6 gaps
+    + 8 + 23.2 stat cells + 10 padding = 180.4
 
-  Ids are deliberately the same as widget_dashboard's. RemoteViews resolves ids
-  within one layout, so reuse across separate layout files is free, and it means
-  DashboardWidget.render() fills any size in without knowing which it has. The
-  detail views are the only addition; sizes without them declare hasDetail=false
-  and render() skips them.
-
-  Weighted rows, for the reason spelled out in widget_dashboard.xml: without
-  them the content sits at the top of whatever height the launcher grants and
-  the remainder is dead space.
-
-  NestedWeights is suppressed on the meter rows, deliberately.
-
-  The check is right about the mechanism: a weighted row inside a weighted
-  container costs an extra measure pass, and the bars inside these rows are
-  weighted too. It is wrong about the cost here. This is four rows in a tree a
-  dozen views deep, re-inflated when a snapshot lands — at most once every two
-  minutes, and never during a scroll or an animation. The alternative is
-  pinning the rows to the top and leaving the rest of the card an empty slab,
-  which is the bug this replaced.
-
-  The root wraps its content rather than filling the frame.
-
-  A widget is handed a whole number of cells, which is almost never the height
-  of this layout. With match_parent the background drawable painted all of it,
-  so the leftover showed up as a black band — the "empty space in the widget"
-  reported on every size. Arranging that slack (top, centred, spread between
-  rows) only moved the band around. wrap_content leaves the remainder
-  transparent instead, so the card ends where the content ends.
+  The stat cells are numbers, never names: a home screen is not the place to
+  publish which protections a machine is missing.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:gravity="center_vertical"
     android:background="@drawable/widget_background"
-    android:padding="10dp">
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
-        <TextView android:id="@+id/widget_host"
-            android:layout_width="0dp" android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_host"
+            style="@style/WidgetText.Host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#F2F1EC" android:textSize="18sp"
-            android:maxLines="1" android:ellipsize="end"
             android:text="@string/widget_no_computer" />
-        <TextView android:id="@+id/widget_age"
-            android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#7A7A7F" android:textSize="13sp" android:maxLines="1" />
+        <TextView
+            android:id="@+id/widget_age"
+            style="@style/WidgetText.Age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_meters"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="8dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
         android:orientation="vertical">
-
-        <LinearLayout android:id="@+id/meter_row_1"
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center_vertical" android:layout_marginBottom="4dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="bottom">
-                <TextView android:id="@+id/meter_label_1"
+        <LinearLayout
+            android:id="@+id/meter_row_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView android:id="@+id/meter_label_1" style="@style/WidgetText.Label"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_1" style="@style/WidgetText.Value"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp" />
+                <TextView android:id="@+id/meter_detail_1" style="@style/WidgetText.Detail"
                     android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="#7A7A7F" android:textSize="13sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_value_1"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:textColor="#F2F1EC" android:textSize="16sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_detail_1"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textColor="#7A7A7F" android:textSize="13sp"
-                    android:maxLines="1" android:ellipsize="end" />
+                    android:layout_weight="1" android:layout_marginStart="8dp"
+                    android:gravity="end" />
             </LinearLayout>
-            <ProgressBar android:id="@+id/meter_bar_1"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent" android:layout_height="10dp"
-                android:layout_marginTop="3dp" android:max="100"
-                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <ProgressBar android:id="@+id/meter_bar_1" style="@style/WidgetBar"
+                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_marginTop="3dp" />
         </LinearLayout>
-
-        <LinearLayout android:id="@+id/meter_row_2"
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center_vertical" android:layout_marginBottom="4dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="bottom">
-                <TextView android:id="@+id/meter_label_2"
+        <LinearLayout
+            android:id="@+id/meter_row_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView android:id="@+id/meter_label_2" style="@style/WidgetText.Label"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_2" style="@style/WidgetText.Value"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp" />
+                <TextView android:id="@+id/meter_detail_2" style="@style/WidgetText.Detail"
                     android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="#7A7A7F" android:textSize="13sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_value_2"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:textColor="#F2F1EC" android:textSize="16sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_detail_2"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textColor="#7A7A7F" android:textSize="13sp"
-                    android:maxLines="1" android:ellipsize="end" />
+                    android:layout_weight="1" android:layout_marginStart="8dp"
+                    android:gravity="end" />
             </LinearLayout>
-            <ProgressBar android:id="@+id/meter_bar_2"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent" android:layout_height="10dp"
-                android:layout_marginTop="3dp" android:max="100"
-                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <ProgressBar android:id="@+id/meter_bar_2" style="@style/WidgetBar"
+                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_marginTop="3dp" />
         </LinearLayout>
-
-        <LinearLayout android:id="@+id/meter_row_3"
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center_vertical" android:layout_marginBottom="4dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="bottom">
-                <TextView android:id="@+id/meter_label_3"
+        <LinearLayout
+            android:id="@+id/meter_row_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView android:id="@+id/meter_label_3" style="@style/WidgetText.Label"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_3" style="@style/WidgetText.Value"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp" />
+                <TextView android:id="@+id/meter_detail_3" style="@style/WidgetText.Detail"
                     android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="#7A7A7F" android:textSize="13sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_value_3"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:textColor="#F2F1EC" android:textSize="16sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_detail_3"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textColor="#7A7A7F" android:textSize="13sp"
-                    android:maxLines="1" android:ellipsize="end" />
+                    android:layout_weight="1" android:layout_marginStart="8dp"
+                    android:gravity="end" />
             </LinearLayout>
-            <ProgressBar android:id="@+id/meter_bar_3"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent" android:layout_height="10dp"
-                android:layout_marginTop="3dp" android:max="100"
-                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <ProgressBar android:id="@+id/meter_bar_3" style="@style/WidgetBar"
+                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_marginTop="3dp" />
         </LinearLayout>
-
-        <LinearLayout android:id="@+id/meter_row_4"
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center_vertical" android:layout_marginBottom="4dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="bottom">
-                <TextView android:id="@+id/meter_label_4"
+        <LinearLayout
+            android:id="@+id/meter_row_4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView android:id="@+id/meter_label_4" style="@style/WidgetText.Label"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_4" style="@style/WidgetText.Value"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp" />
+                <TextView android:id="@+id/meter_detail_4" style="@style/WidgetText.Detail"
                     android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="#7A7A7F" android:textSize="13sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_value_4"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:textColor="#F2F1EC" android:textSize="16sp" android:maxLines="1" />
-                <TextView android:id="@+id/meter_detail_4"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textColor="#7A7A7F" android:textSize="13sp"
-                    android:maxLines="1" android:ellipsize="end" />
+                    android:layout_weight="1" android:layout_marginStart="8dp"
+                    android:gravity="end" />
             </LinearLayout>
-            <ProgressBar android:id="@+id/meter_bar_4"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent" android:layout_height="10dp"
-                android:layout_marginTop="3dp" android:max="100"
-                android:progressTint="#F2F1EC" android:progressBackgroundTint="#33F2F1EC" />
+            <ProgressBar android:id="@+id/meter_bar_4" style="@style/WidgetBar"
+                android:layout_width="match_parent" android:layout_height="4dp"
+                android:layout_marginTop="3dp" />
         </LinearLayout>
     </LinearLayout>
 
@@ -177,44 +152,50 @@
         android:id="@+id/widget_stats"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
-        android:orientation="horizontal">
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:orientation="horizontal" android:gravity="center"
-            android:background="@drawable/widget_cell" android:padding="6dp"
-            android:layout_marginEnd="6dp">
-            <TextView android:id="@+id/stat_hardening_value"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="6dp" android:orientation="horizontal"
+            android:gravity="center" android:background="@drawable/widget_cell"
+            android:paddingVertical="4dp">
+            <TextView android:id="@+id/stat_hardening_value" style="@style/WidgetText.Value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <TextView style="@style/WidgetText.Detail"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="17sp" android:maxLines="1" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="12sp"
-                android:text="@string/widget_stat_hardening" />
+                android:layout_marginStart="5dp" android:text="@string/widget_stat_hardening" />
         </LinearLayout>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:orientation="horizontal" android:gravity="center"
-            android:background="@drawable/widget_cell" android:padding="6dp"
-            android:layout_marginEnd="6dp">
-            <TextView android:id="@+id/stat_services_value"
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="6dp" android:orientation="horizontal"
+            android:gravity="center" android:background="@drawable/widget_cell"
+            android:paddingVertical="4dp">
+            <TextView android:id="@+id/stat_services_value" style="@style/WidgetText.Value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <TextView style="@style/WidgetText.Detail"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="17sp" android:maxLines="1" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="12sp"
-                android:text="@string/widget_stat_services" />
+                android:layout_marginStart="5dp" android:text="@string/widget_stat_services" />
         </LinearLayout>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:orientation="horizontal" android:gravity="center"
-            android:background="@drawable/widget_cell" android:padding="6dp">
-            <TextView android:id="@+id/stat_network_value"
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="horizontal"
+            android:gravity="center" android:background="@drawable/widget_cell"
+            android:paddingVertical="4dp">
+            <TextView android:id="@+id/stat_network_value" style="@style/WidgetText.Value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <TextView style="@style/WidgetText.Detail"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#F2F1EC" android:textSize="17sp" android:maxLines="1" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textColor="#7A7A7F" android:textSize="12sp"
-                android:text="@string/widget_stat_network" />
+                android:layout_marginStart="5dp" android:text="@string/widget_stat_network" />
         </LinearLayout>
     </LinearLayout>
 
-    <TextView android:id="@+id/widget_hint"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="8dp" android:visibility="gone"
-        android:textColor="#7A7A7F" android:textSize="13sp" />
+    <TextView
+        android:id="@+id/widget_hint"
+        style="@style/WidgetText.Hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:maxLines="4"
+        android:visibility="gone" />
 </LinearLayout>

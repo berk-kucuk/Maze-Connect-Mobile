@@ -1,28 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  updatePeriodMillis is 0 on purpose: the system's own period has a 30-minute
-  floor and wakes the device to honour it. This widget has nothing to fetch on
-  a schedule — it draws whatever the app last saw — so it is redrawn when a
-  snapshot arrives instead, and costs nothing in between.
+  Dashboard, placed at 4x1 (Strip).
 
-  minResizeWidth/Height are stated rather than left to default, and that
-  omission was a real one: without them the smallest a widget can be dragged
-  is its minWidth/minHeight, so a home screen whose cells are taller than this
-  content gave the widget more room than it asked for and offered no way to
-  take it back. minHeight is now measured against the laid-out content rather
-  than guessed, and the resize floor sits just under it.
+  The sizes follow Android's own rule for n cells, 70 x n - 30 dp, so the
+  launcher places it on exactly the cells named by targetCell*: 4x1.
+  The widget itself adapts to whatever it is then given — rotated, resized,
+  or on a grid with taller cells — by picking among layouts measured for
+  each range (WidgetSizing). That is why minResize can go down to one row:
+  shrinking it switches to a layout made for that height instead of
+  clipping this one.
+
+  updatePeriodMillis is 0: it is redrawn when the app receives something,
+  never on a timer that wakes the phone.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="UnusedAttribute"
     android:minWidth="250dp"
-    android:minHeight="52dp"
+    android:minHeight="40dp"
     android:minResizeWidth="180dp"
-    android:minResizeHeight="46dp"
+    android:minResizeHeight="40dp"
     android:targetCellWidth="4"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
     android:configure="com.mazeconnect.app.widget.DashboardWidgetConfigureActivity"
     android:initialLayout="@layout/widget_compact"
-    android:previewLayout="@layout/widget_compact"
+    android:previewLayout="@layout/widget_preview_compact"
     android:description="@string/widget_compact_description"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />

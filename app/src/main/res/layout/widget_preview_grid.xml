@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from widget_grid.xml with sample readings: the widget picker's preview.
+     Never drawn on a home screen, so the numbers cannot be mistaken for live
+     ones. Regenerate when the source layout changes. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="HardcodedText"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_background"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_host"
+            style="@style/WidgetText.Host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="msi" />
+        <TextView
+            android:id="@+id/widget_age" android:text="just now"
+            style="@style/WidgetText.Age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_meters"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:orientation="vertical">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false">
+            <LinearLayout
+                android:id="@+id/meter_row_1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:orientation="vertical"
+                android:background="@drawable/widget_cell"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="7dp">
+                <TextView android:id="@+id/meter_label_1" android:text="CPU" style="@style/WidgetText.Label"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_1" android:text="23%" style="@style/WidgetText.Big"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <ProgressBar android:id="@+id/meter_bar_1" android:progress="23" style="@style/WidgetBar"
+                    android:layout_width="match_parent" android:layout_height="4dp"
+                    android:layout_marginTop="4dp" />
+                <TextView android:id="@+id/meter_detail_1" android:text="8 cores · 3.1 GHz" style="@style/WidgetText.Detail"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/meter_row_2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/widget_cell"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="7dp">
+                <TextView android:id="@+id/meter_label_2" android:text="Memory" style="@style/WidgetText.Label"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_2" android:text="41%" style="@style/WidgetText.Big"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <ProgressBar android:id="@+id/meter_bar_2" android:progress="41" style="@style/WidgetBar"
+                    android:layout_width="match_parent" android:layout_height="4dp"
+                    android:layout_marginTop="4dp" />
+                <TextView android:id="@+id/meter_detail_2" android:text="12.8 / 31.3 GiB" style="@style/WidgetText.Detail"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:baselineAligned="false">
+            <LinearLayout
+                android:id="@+id/meter_row_3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:orientation="vertical"
+                android:background="@drawable/widget_cell"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="7dp">
+                <TextView android:id="@+id/meter_label_3" android:text="Disk" style="@style/WidgetText.Label"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_3" android:text="58%" style="@style/WidgetText.Big"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <ProgressBar android:id="@+id/meter_bar_3" android:progress="58" style="@style/WidgetBar"
+                    android:layout_width="match_parent" android:layout_height="4dp"
+                    android:layout_marginTop="4dp" />
+                <TextView android:id="@+id/meter_detail_3" android:text="271 / 466 GiB" style="@style/WidgetText.Detail"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/meter_row_4"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/widget_cell"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="7dp">
+                <TextView android:id="@+id/meter_label_4" android:text="Temp" style="@style/WidgetText.Label"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/meter_value_4" android:text="47%" style="@style/WidgetText.Big"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" />
+                <ProgressBar android:id="@+id/meter_bar_4" android:progress="47" style="@style/WidgetBar"
+                    android:layout_width="match_parent" android:layout_height="4dp"
+                    android:layout_marginTop="4dp" />
+                <TextView android:id="@+id/meter_detail_4" android:text="47 °C" style="@style/WidgetText.Detail"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_hint"
+        style="@style/WidgetText.Hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:maxLines="4"
+        android:visibility="gone" />
+</LinearLayout>

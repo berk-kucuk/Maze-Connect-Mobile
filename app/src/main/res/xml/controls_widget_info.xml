@@ -1,17 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 4x1 of buttons. It was 4x2, which spent a quarter of a screen on four
-     short buttons. Update period zero for the same reason as the others: it
-     is redrawn when a reading arrives, not on a timer that wakes the
-     device. -->
+<!--
+  Killswitch controls, placed at 4x1.
+
+  The sizes follow Android's own rule for n cells, 70 x n - 30 dp, so the
+  launcher places it on exactly the cells named by targetCell*: 4x1.
+  The widget itself adapts to whatever it is then given — rotated, resized,
+  or on a grid with taller cells — by picking among layouts measured for
+  each range (WidgetSizing). That is why minResize can go down to one row:
+  shrinking it switches to a layout made for that height instead of
+  clipping this one.
+
+  updatePeriodMillis is 0: it is redrawn when the app receives something,
+  never on a timer that wakes the phone.
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="UnusedAttribute"
     android:minWidth="250dp"
     android:minHeight="40dp"
+    android:minResizeWidth="250dp"
+    android:minResizeHeight="40dp"
     android:targetCellWidth="4"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
     android:configure="com.mazeconnect.app.widget.ControlsWidgetConfigureActivity"
     android:initialLayout="@layout/widget_controls"
-    android:previewLayout="@layout/widget_controls"
+    android:previewLayout="@layout/widget_preview_controls"
     android:description="@string/widget_controls_description"
-    android:resizeMode="horizontal"
+    android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />

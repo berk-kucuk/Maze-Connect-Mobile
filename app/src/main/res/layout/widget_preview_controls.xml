@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from widget_controls.xml with sample readings: the widget picker's preview.
+     Never drawn on a home screen, so the numbers cannot be mistaken for live
+     ones. Regenerate when the source layout changes. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="HardcodedText"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_background"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_host"
+            style="@style/WidgetText.Host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="13sp"
+            android:text="msi" />
+        <TextView
+            android:id="@+id/widget_age" android:text="just now"
+            style="@style/WidgetText.Age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/control_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+        <LinearLayout android:id="@+id/control_1"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="5dp" android:orientation="vertical"
+            android:gravity="center" android:background="@drawable/widget_cell"
+            android:paddingVertical="6dp">
+            <ImageView android:id="@+id/control_icon_1"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_camera" android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_1" android:text="Camera" style="@style/WidgetText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" android:textSize="11sp" />
+            <TextView android:id="@+id/control_state_1" android:text="blocked" style="@style/WidgetText.Detail"
+                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/control_2"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="5dp" android:orientation="vertical"
+            android:gravity="center" android:background="@drawable/widget_cell"
+            android:paddingVertical="6dp">
+            <ImageView android:id="@+id/control_icon_2"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_microphone" android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_2" android:text="Mic" style="@style/WidgetText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" android:textSize="11sp" />
+            <TextView android:id="@+id/control_state_2" android:text="blocked" style="@style/WidgetText.Detail"
+                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/control_3"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="5dp" android:orientation="vertical"
+            android:gravity="center" android:background="@drawable/widget_cell"
+            android:paddingVertical="6dp">
+            <ImageView android:id="@+id/control_icon_3"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_wifi" android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_3" android:text="Wi-Fi" style="@style/WidgetText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" android:textSize="11sp" />
+            <TextView android:id="@+id/control_state_3" android:text="allowed" style="@style/WidgetText.Detail"
+                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/control_4"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:background="@drawable/widget_cell"
+            android:paddingVertical="6dp">
+            <ImageView android:id="@+id/control_icon_4"
+                android:layout_width="18dp" android:layout_height="18dp"
+                android:src="@drawable/ic_bluetooth" android:contentDescription="@null" />
+            <TextView android:id="@+id/control_name_4" android:text="BT" style="@style/WidgetText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" android:textSize="11sp" />
+            <TextView android:id="@+id/control_state_4" android:text="allowed" style="@style/WidgetText.Detail"
+                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_hint"
+        style="@style/WidgetText.Hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="3"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>

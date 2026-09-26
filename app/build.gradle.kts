@@ -38,9 +38,20 @@ android {
         targetSdk = 37
         // Must never go backwards or repeat: Android refuses to install an
         // update whose versionCode is not higher than the installed one.
-        versionCode = 46
-        versionName = "0.14.1"
+        versionCode = 47
+        versionName = "0.15.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The F-Droid build (`-Pmazeconnect.fdroid=true`, set in fdroiddata's
+        // metadata) leaves the update reminder out entirely. F-Droid delivers
+        // updates itself, and its inclusion policy does not accept an app
+        // that points users at a download outside it. Everything else is the
+        // same APK — a flag rather than a flavour, because the flavours this
+        // project once had were removed for good reasons (see README).
+        val fdroid = providers.gradleProperty("mazeconnect.fdroid")
+            .map { it.toBoolean() }
+            .getOrElse(false)
+        buildConfigField("boolean", "UPDATE_CHECKER", (!fdroid).toString())
     }
 
     signingConfigs {
@@ -84,6 +95,16 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    // AGP otherwise embeds a dependency list in the APK signing block,
+    // encrypted with a Google key nobody else can read. F-Droid's scanner
+    // refuses it — a blob in the package that cannot be inspected is exactly
+    // what a reproducible, auditable build must not contain.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
 }

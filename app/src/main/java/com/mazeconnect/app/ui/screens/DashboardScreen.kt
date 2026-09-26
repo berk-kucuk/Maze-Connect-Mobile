@@ -56,6 +56,7 @@ fun DashboardScreen(
     onRefresh: (String) -> Unit,
     onManualRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenDevices: () -> Unit = {},
 ) {
     val colors = LocalMazeColors.current
 
@@ -101,8 +102,10 @@ fun DashboardScreen(
 
         when {
             target == null -> Unavailable(
-                title = "Nothing to read",
+                title = if (devices.none { it.paired }) "No computer paired" else "Nothing to read",
                 body = whyThereIsNoTarget(devices),
+                action = if (devices.none { it.paired }) "Pair a computer" else "Devices",
+                onAction = onOpenDevices,
             )
 
             snapshot == null -> Unavailable(
@@ -243,7 +246,12 @@ private fun StateRow(label: String, value: String, state: SystemStatus.State) {
 }
 
 @Composable
-private fun Unavailable(title: String, body: String) {
+private fun Unavailable(
+    title: String,
+    body: String,
+    action: String? = null,
+    onAction: () -> Unit = {},
+) {
     val colors = LocalMazeColors.current
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
@@ -262,6 +270,10 @@ private fun Unavailable(title: String, body: String) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
+            if (action != null) {
+                Spacer(Modifier.height(8.dp))
+                MazeButton(action, onAction)
+            }
         }
     }
 }
@@ -276,8 +288,9 @@ private fun whyThereIsNoTarget(devices: List<DeviceRow>): String {
         paired.none { it.connected } ->
             "No paired computer is reachable right now."
         else ->
-            "Turn on Dashboard for the computer under Devices. Reading a " +
-                "machine stays off until you allow it, even though it only reads."
+            "The connected computer does not share its dashboard with this phone — " +
+                "it was switched off on the computer's Devices page, or its Maze " +
+                "Connect is too old to offer one."
     }
 }
 

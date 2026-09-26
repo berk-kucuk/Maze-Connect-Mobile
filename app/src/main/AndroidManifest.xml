@@ -16,6 +16,9 @@
     <!-- Keeps the Wi-Fi radio from being parked while the screen is off, which
          is when a home-screen widget most needs the link to still be up. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- "Find my phone" vibrates while it rings. Normal permission, granted
+         at install. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!--
@@ -95,8 +98,9 @@
             </intent-filter>
         </activity>
 
-        <!-- The 4x3: the same readings as the 4x2, with room for the
-             computer's detail strings beside them. -->
+        <!-- Detailed (4x2): every reading with the computer's detail string,
+             plus hardening/services/network. Like every dashboard provider
+             it adapts to the size it is given — see WidgetSizing. -->
         <receiver
             android:name=".widget.DashboardWidget$Detailed"
             android:exported="true">
@@ -108,7 +112,7 @@
                 android:resource="@xml/detailed_widget_info" />
         </receiver>
 
-        <!-- The 2x2 square: two readings with their detail. -->
+        <!-- Square (2x2): two readings with their detail. -->
         <receiver
             android:name=".widget.DashboardWidget$Tile"
             android:exported="true">
@@ -131,7 +135,7 @@
                 android:resource="@xml/compact_widget_info" />
         </receiver>
 
-        <!-- The 2x1 mini glance: hostname and freshness, nothing else. -->
+        <!-- Mini (2x1): the computer's name and two readings. -->
         <receiver
             android:name=".widget.DashboardWidget$Mini"
             android:exported="true">
@@ -277,6 +281,12 @@
              MazeConnectService's own PendingIntent ever reaches it. -->
         <receiver
             android:name=".service.OpenOnPhoneReceiver"
+            android:exported="false" />
+
+        <!-- "Found it" on the find-my-phone notification. Not exported —
+             only that notification's own PendingIntent reaches it. -->
+        <receiver
+            android:name=".service.FindPhoneRinger$Receiver"
             android:exported="false" />
 
         <!-- The media notification's buttons. Not exported — only the

@@ -60,6 +60,9 @@ object Link {
         manager?.let { return it }
         val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Main + crashGuard)
         val created = DeviceManager(context.applicationContext, newScope)
+        // The owner's switches, before anything can ask: a status request
+        // arriving in the first second must already see "sharing is off".
+        PhonePrefs.apply(context, created)
         scope = newScope
         manager = created
         return created

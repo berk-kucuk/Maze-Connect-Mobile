@@ -45,6 +45,12 @@ private sealed interface Stage {
     data class Failed(val message: String) : Stage
 }
 
+/** What was shared: files, or a piece of text (often a link). */
+private sealed interface Shared {
+    data class Files(val uris: List<Uri>) : Shared
+    data class Text(val text: String) : Shared
+}
+
 /**
  * The Android share-sheet target: "Share" a file from any app straight to
  * a paired computer, no need to open Maze Connect first.
@@ -65,8 +71,8 @@ class ShareReceiverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val uris = extractUris(intent)
-        if (uris.isEmpty()) {
+        val shared = extractShare(intent)
+        if (shared == null) {
             finish()
             return
         }
@@ -76,15 +82,49 @@ class ShareReceiverActivity : ComponentActivity() {
                 var stage: Stage by remember { mutableStateOf(Stage.Asking) }
 
                 Confirm(
-                    count = uris.size,
+                    shared = shared,
                     stage = stage,
                     onConfirm = {
                         stage = Stage.Working
-                        lifecycleScope.launch { stage = send(uris) }
+                        lifecycleScope.launch {
+                            stage = when (shared) {
+                                is Shared.Files -> send(shared.uris)
+                                is Shared.Text -> sendText(shared.text)
+                            }
+                        }
                     },
                     onDismiss = { finish() },
                 )
             }
+        }
+    }
+
+    /** Text goes to the first reachable computer that takes it, onto its
+     *  clipboard — the computer opens a link only if its user clicks it. */
+    private suspend fun sendText(text: String): Stage {
+        MazeConnectService.start(this)
+        val manager = withTimeoutOrNull(LINK_WAIT_MS) {
+            while (MazeConnectService.manager() == null) delay(POLL_MS)
+            MazeConnectService.manager()
+        } ?: return Stage.Failed(getString(R.string.guard_widget_no_service))
+
+        val target = withTimeoutOrNull(LINK_WAIT_MS) {
+            var found: String? = null
+            while (found == null) {
+                found = manager.connectedIds.value.firstOrNull {
+                    manager.allows(it, Capability.SHARE_TEXT)
+                }
+                if (found == null) delay(POLL_MS)
+            }
+            found
+        } ?: return Stage.Failed(
+            "No paired computer that accepts text is reachable. If it is running, update " +
+                "Maze Connect on the computer to 1.3.0 or later."
+        )
+        return if (manager.shareText(target, text)) {
+            Stage.Done(1, 0)
+        } else {
+            Stage.Failed("That text cannot be sent — it is too long or contains control characters.")
         }
     }
 
@@ -128,25 +168,43 @@ class ShareReceiverActivity : ComponentActivity() {
         private const val LINK_WAIT_MS = 12_000L
         private const val POLL_MS = 150L
 
-        /** Both the single- and multi-file share actions carry their content
-         *  under the same historical extra name. */
-        private fun extractUris(intent: Intent): List<Uri> = when (intent.action) {
-            Intent.ACTION_SEND -> {
-                @Suppress("DEPRECATION")
-                (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)?.let { listOf(it) }
-                    ?: emptyList()
-            }
-            Intent.ACTION_SEND_MULTIPLE -> {
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) ?: emptyList()
-            }
-            else -> emptyList()
+        /**
+         * Files if the share carries any, otherwise its text.
+         *
+         * Only content:// URIs are taken. This activity is exported — any app
+         * can start it with any URI — and it reads with this app's own file
+         * access, so a file:// URI naming one of Maze Connect's private files
+         * would be read with permissions the sending app never had. A real
+         * share always arrives as content://, granted by the app that owns it.
+         */
+        private fun extractShare(intent: Intent): Shared? {
+            val uris = when (intent.action) {
+                Intent.ACTION_SEND -> {
+                    @Suppress("DEPRECATION")
+                    (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)?.let { listOf(it) }
+                        ?: emptyList()
+                }
+                Intent.ACTION_SEND_MULTIPLE -> {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) ?: emptyList()
+                }
+                else -> emptyList()
+            }.filter { it.scheme.equals("content", ignoreCase = true) }
+            if (uris.isNotEmpty()) return Shared.Files(uris)
+
+            if (intent.action != Intent.ACTION_SEND) return null
+            val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
+            return text?.takeIf { it.isNotEmpty() }?.let { Shared.Text(it) }
         }
     }
 }
 
 @Composable
-private fun Confirm(count: Int, stage: Stage, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun Confirm(shared: Shared, stage: Stage, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val count = (shared as? Shared.Files)?.uris?.size ?: 0
+    val text = (shared as? Shared.Text)?.text
+    val isLink = text != null && text.none { it.isWhitespace() } &&
+        android.util.Patterns.WEB_URL.matcher(text).matches()
     val colors = LocalMazeColors.current
     val failed = stage as? Stage.Failed
     val done = stage as? Stage.Done
@@ -163,20 +221,36 @@ private fun Confirm(count: Int, stage: Stage, onConfirm: () -> Unit, onDismiss: 
                 when {
                     failed != null -> "Not sent"
                     done != null -> "Sent"
+                    isLink -> "Send this link?"
+                    text != null -> "Send this text?"
                     count == 1 -> "Send this file?"
                     else -> "Send $count files?"
                 },
             )
+            if (text != null && failed == null && done == null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MazeColors.Paper,
+                    maxLines = 4,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(12.dp))
             Text(
                 text = when {
                     failed != null -> failed.message
+                    done != null && text != null ->
+                        "It is on your computer's clipboard now."
                     done != null -> if (done.failed == 0) {
                         "Sent to your computer."
                     } else {
                         "${done.sent} sent, ${done.failed} failed."
                     }
                     working -> "Reaching your computer…"
+                    text != null ->
+                        "Goes to the clipboard of the paired computer that's reachable right now."
                     else -> "Goes to the paired computer that's reachable right now."
                 },
                 style = MaterialTheme.typography.bodyMedium,

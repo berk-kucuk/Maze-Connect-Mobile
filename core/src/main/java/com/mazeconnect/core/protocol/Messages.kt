@@ -53,7 +53,22 @@ enum class MessageType(val wire: String) {
     MEDIA_STATE("mediaState"),
 
     /** Phone -> computer: one action from a fixed table. */
-    MEDIA_COMMAND("mediaCommand");
+    MEDIA_COMMAND("mediaCommand"),
+
+    /** Computer -> phone: send your battery/storage/network reading. */
+    PHONE_STATUS_REQUEST("phoneStatusRequest"),
+
+    /** Phone -> computer: that reading, or why there isn't one. */
+    PHONE_STATUS("phoneStatus"),
+
+    /** Computer -> phone: start or stop ringing. */
+    FIND_PHONE("findPhone"),
+
+    /** Phone -> computer: whether it is ringing now, or why not. */
+    FIND_PHONE_RESULT("findPhoneResult"),
+
+    /** Phone -> computer: text or a link for the clipboard. */
+    SHARE_TEXT("shareText");
 
     companion object {
         fun from(wire: String?): MessageType? = entries.firstOrNull { it.wire == wire }
@@ -91,6 +106,20 @@ class Message private constructor(
         val value = body.opt(key) as? String ?: return null
         if (value.length > maxChars) return null
         if (value.any { it.code < 0x20 || it.code == 0x7F || it.code in 0x80..0x9F }) return null
+        return value
+    }
+
+    /**
+     * Free text — a clipboard, a shared note — bounded like [string] but
+     * allowing tab, line feed and carriage return, which ordinary text is made
+     * of. Every other control character, and the bidirectional overrides that
+     * make a link display as somewhere it does not go, still reject the field
+     * rather than being stripped. Mirrors the desktop's `Message::text()`.
+     */
+    fun text(key: String, maxChars: Int): String? {
+        val value = body.opt(key) as? String ?: return null
+        if (value.length > maxChars) return null
+        if (!isAllowedText(value)) return null
         return value
     }
 
@@ -183,6 +212,18 @@ class Message private constructor(
     }
 
     companion object {
+        /** See [text]. Public so the sending side can refuse the same
+         *  strings before they ever reach the wire. */
+        fun isAllowedText(value: String): Boolean = value.none { c ->
+            val code = c.code
+            if (c == '\t' || c == '\n' || c == '\r') {
+                false
+            } else {
+                code < 0x20 || code == 0x7F || code in 0x80..0x9F ||
+                    code in 0x202A..0x202E || code in 0x2066..0x2069
+            }
+        }
+
         private const val KEY_VERSION = "v"
         private const val KEY_TYPE = "t"
         private const val KEY_COUNTER = "c"
@@ -441,6 +482,37 @@ class Message private constructor(
         /** Sent by the computer; here so the interop vectors can build it. */
         fun mediaState(counter: Long, media: JSONObject) =
             build(MessageType.MEDIA_STATE, counter) { put("media", media) }
+
+        /** Sent by the computer; here so the interop vectors can build it. */
+        fun phoneStatusRequest(counter: Long) = build(MessageType.PHONE_STATUS_REQUEST, counter)
+
+        /**
+         * This phone's reading, nested whole under "status" so no field of it
+         * can collide with an envelope key — the same shape as the computer's
+         * statusReport.
+         */
+        fun phoneStatus(counter: Long, status: JSONObject) =
+            build(MessageType.PHONE_STATUS, counter) { put("status", status) }
+
+        /** The same type carrying why there is no reading. */
+        fun phoneStatusUnavailable(counter: Long, reason: String) =
+            build(MessageType.PHONE_STATUS, counter) { put("error", reason) }
+
+        /** Sent by the computer; here so the interop vectors can build it. */
+        fun findPhone(counter: Long, ring: Boolean) =
+            build(MessageType.FIND_PHONE, counter) { put("ring", ring) }
+
+        /** Whether this phone is ringing now — sent in answer to [findPhone],
+         *  and again when the person holding it silences it. */
+        fun findPhoneResult(counter: Long, ringing: Boolean, error: String? = null) =
+            build(MessageType.FIND_PHONE_RESULT, counter) {
+                put("ringing", ringing)
+                if (!error.isNullOrEmpty()) put("error", error)
+            }
+
+        /** Text or a link for the computer's clipboard. */
+        fun shareText(counter: Long, text: String) =
+            build(MessageType.SHARE_TEXT, counter) { put("text", text) }
     }
 }
 

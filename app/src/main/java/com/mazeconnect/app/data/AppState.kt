@@ -296,6 +296,57 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
     fun clearFinishedTransfers() = manager.clearFinishedTransfers()
 
+    /**
+     * Put [text] on a computer's clipboard: the one on screen if it takes
+     * text, otherwise the first that does. Every refusal is said, because a
+     * clipboard send has nothing else to show for itself.
+     */
+    fun sendText(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) {
+            _status.value = "The clipboard is empty."
+            return
+        }
+        if (trimmed.length > com.mazeconnect.core.Limits.MAX_SHARE_TEXT_CHARS) {
+            _status.value = "That is too long to send — the limit is " +
+                "${com.mazeconnect.core.Limits.MAX_SHARE_TEXT_CHARS} characters."
+            return
+        }
+        val selected = selectedDeviceId.value
+        val target = selected?.takeIf { manager.allows(it, Capability.SHARE_TEXT) }
+            ?: manager.connectedIds.value.firstOrNull { manager.allows(it, Capability.SHARE_TEXT) }
+        if (target == null) {
+            _status.value = if (manager.connectedIds.value.isEmpty()) {
+                "No paired computer is reachable right now."
+            } else {
+                "The computer's Maze Connect is too old to take text — update it to 1.3.0."
+            }
+            return
+        }
+        _status.value = if (manager.shareText(target, trimmed)) {
+            "Sent to the computer's clipboard."
+        } else {
+            "That text cannot be sent — it contains control characters."
+        }
+    }
+
+    // ---- This phone ------------------------------------------------------
+
+    var shareStatusEnabled: Boolean
+        get() = com.mazeconnect.app.service.PhonePrefs.shareStatus(getApplication())
+        set(value) = com.mazeconnect.app.service.PhonePrefs.setShareStatus(getApplication(), value, manager)
+
+    var allowRingEnabled: Boolean
+        get() = com.mazeconnect.app.service.PhonePrefs.allowRing(getApplication())
+        set(value) = com.mazeconnect.app.service.PhonePrefs.setAllowRing(getApplication(), value, manager)
+
+    /** Ring once from Settings, so the owner knows what a computer's ring
+     *  sounds like — and that it is loud enough — before the day they need it. */
+    fun testRing() {
+        com.mazeconnect.app.service.FindPhoneRinger.start(getApplication(), "Settings")
+        _status.value = "Ringing — tap Found it in the notification to stop."
+    }
+
     // ---- maze-guard ------------------------------------------------------
 
     val guard: StateFlow<GuardStateSnapshot?> =
@@ -438,6 +489,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private val _update = MutableStateFlow(UpdateStatus())
     val update: StateFlow<UpdateStatus> = _update.asStateFlow()
 
+    /** False in the F-Droid build, where F-Droid delivers updates. */
+    val updateCheckAvailable: Boolean get() = UpdateChecker.available
+
     val installedVersionCode: Long get() = UpdateChecker.installedVersionCode(getApplication())
     val installedVersionName: String get() = UpdateChecker.installedVersionName(getApplication())
 
@@ -496,6 +550,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
         // The dialog this event also raises is the real surface; the status
         // line just explains why it appeared.
         is DeviceEvent.PairingRequested -> "$deviceName wants to pair."
+        is DeviceEvent.FindPhone ->
+            if (ring) "$deviceName is ringing this phone." else "Ringing stopped."
     }
 
     private fun PairedDevice.toRow(connected: Boolean) = DeviceRow(

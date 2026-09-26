@@ -1364,3 +1364,108 @@ duran eski 4×2 tahsisiyle kalmış olsa bile doğru görünüyor.
 Aile: Mini 2×1, Compact 4×1, Dashboard 4×1, Tile 2×2, Detailed 4×2.
 
 Sürüm 0.12.7 / versionCode 36. Testler ve release temiz, lint 50.
+
+
+---
+
+## 0.15.0 — telefon durumu, telefonu bul, metin paylaşımı, duyarlı widget'lar, yeni gezinme
+
+İstenen: KDE Connect'ten daha iyi, profesyonel bir uygulama; masaüstü
+panosunun telefonu göstermesi; widget boyutlarının düzeltilmesi.
+
+### Güvenlik düzeltmeleri
+
+- **Eşleştirme cevabı yanlış linkten kabul ediliyordu.** `PAIR_RESULT`
+  bekleyen eşleşmenin cihazıyla linki karşılaştırmıyordu: ağdaki herhangi bir
+  eşleşmemiş eş (eşleşme mesajları göndermesine izin var) başka bir cihazla
+  süren eşleşmeye "accepted" gönderip onu gerçek cevap olmadan pinletebiliyor
+  ve `finalizePairing(link)` **kendi linkini** güvenilir işaretliyordu.
+  Masaüstü bekleyenleri zaten linke göre tutuyordu; mobil artık
+  `pending.deviceId == link.deviceId` ve `!link.trusted` şartı arıyor
+  (`PAIR_RESPONSE` için de).
+- `ShareReceiverActivity` dışa açık ve uygulamanın kendi izinleriyle okuyor:
+  artık yalnızca `content://` URI kabul ediliyor, `file://` ile uygulamanın özel
+  dosyası gönderilemiyor.
+- Dışa açık widget yapılandırma etkinliği yalnızca bu uygulamanın
+  widget'larına ait `appWidgetId`'yi yapılandırıyor.
+- Bilgisayardan gelen link: yalnızca http(s) açılıyor (şemasız olana https
+  ekleniyor — önceden `Uri.parse("example.com")` sessizce hiçbir şey
+  açmıyordu); `intent:`/`file:`/`javascript:` yalnızca kopyalanıyor.
+- `openOnPhone` artık `Message.text()` ile okunuyor: çok satırlı pano metni
+  önceden `string()` tarafından sessizce reddediliyordu.
+
+### Yeni özellikler
+
+- **Telefon durumu** (`phoneStatus`): `PhoneStatusCollector` → `PhoneReading`.
+  Pil (sticky broadcast), depolama (StatFs), bellek, ağ türü + Wi-Fi RSSI
+  (`NetworkCapabilities.signalStrength`, konum izni yok), zil, DND, güç
+  tasarrufu, ekran, model, sürüm, uptime. **Wi-Fi adı, konum, kimlik yok.**
+  2 sn önbellek. Ayarlar > Bu telefon'da kapatılabilir; kapalıyken gerekçeyle
+  reddediliyor.
+- **Telefonu bul** (`findPhone`): `FindPhoneRinger` — alarm akışında (sessizde
+  de duyulur), alarm sesi en yükseğe çekilip sonra **geri konuyor**, titreşim,
+  HIGH önemde bildirim + "Found it". 2 dk sonra kendiliğinden susuyor; her
+  duruş `reportRinging(false)` ile çaldıran bilgisayarlara bildiriliyor.
+  Ayarlarda anahtar ve *Test ring*. Yeni izin: yalnızca `VIBRATE`.
+- **Metin/link paylaşımı** (`shareText`): herhangi bir uygulamanın Paylaş
+  menüsünden metin veya link (önceden metin paylaşımı hiçbir şey yapmadan
+  kapanıyordu), ve Dosyalar'daki **Clipboard** düğmesi (pano yalnızca uygulama
+  öndeyken okunabiliyor, o yüzden düğmede).
+
+### Widget'lar — neden sürekli ya kırpılıyor ya boş kalıyordu
+
+Kök sebep ölçülmüş: bir launcher hücresinin sabit bir boyu yok. Aynı 4×1
+dikey Pixel'de ~276×102 dp, yatayda ~554×51 dp, Samsung 4×5 ızgarasında
+~360×116 dp. Tek sabit düzen bunlardan birinde mutlaka ya kırpılır ya boş
+kalır; 0.12.x turlarının hepsi sorunu bir yerden öbür yere taşıdı. Ölçümler:
+Mini'nin içeriği ~87 dp iken 60 dp ilan edilmişti; Controls ~119 dp iken
+40 dp; Commands ~90–107 dp iken 40 dp.
+
+Çözüm: **duyarlı widget'lar** (`WidgetSizing`). Her widget birkaç düzen
+taşıyor, her birinin boyu XML'den **hesaplanarak** (font padding kapalı,
+satır = 1.17×sp) `Style`'da tutuluyor ve düzen dosyasının başında yazılı:
+
+| Düzen | Boy (dp) | İçerik |
+| --- | --- | --- |
+| mini | 110×48 | ad + iki sayı |
+| compact | 180×50 | ad/yaş + üç ölçer (yatay 4×1'e sığar) |
+| tile | 110×122 | iki ölçer + detay |
+| dashboard | 180×116 | dört satır etiket/çubuk/değer |
+| grid | 180×192 | 2×2 kutucuk, büyük sayı + detay |
+| detailed | 180×182 | dört satır detaylı + sertleştirme/servis/ağ |
+| controls / slim | 180×94 / 250×46 | |
+| commands / slim | 180×88 / 180×44 | |
+
+API 31+'da boyut haritalı `RemoteViews` — launcher her yön ve yeniden
+boyutlandırmada kendisi seçiyor. API 28–30'da aynı seçim uygulama tarafında
+seçeneklerden (min/max genişlik/yükseklik) yatay/dikey çift olarak yapılıyor.
+İkisi de platformun kendi kuralı (sığanlar arasında en yakın; hiçbiri
+sığmıyorsa en küçük). `WidgetSizingTest` bu seçimi gerçek ölçülerle Android
+belgelerindeki dikey/yatay boylar ve Samsung ızgarası için çiviliyor.
+
+Sağlayıcı boyları artık Android formülü (n hücre → 70n−30 dp), minResize tek
+satıra kadar iniyor (küçültünce kırpılmıyor, o boyun düzenine geçiyor).
+Widget seçicide boş kart yerine örnek verili önizleme düzenleri
+(`widget_preview_*`, kaynak düzenden üretildi). Yuvarlatılmış çubuklar,
+ortak tip ölçeği `values/widget_styles.xml`.
+
+**Cihazda görülmedi** (bu makinede emülatör imajı yok). Yerleştirilmiş eski
+widget'lar yeni düzeni ilk güncellemede alıyor; hücre tahsisi değişmez —
+istenirse kaldırıp yeniden eklenmeli.
+
+### Gezinme
+
+Alt çubuk 8 sekmeydi ve yana kayıyordu (yarısı ekran dışı). Artık 5 sabit:
+**Home, Media, Commands, Files, More**; More altında Devices, Guard, Maze AI,
+Settings (her biri açıklamalı). Geri tuşu yukarı yürüyor (alt sayfa → More →
+Home). Masthead'in sağında hangi bilgisayara bağlı olduğu duruyor, dokununca
+Devices. Dashboard'un boş durumunda "Pair a computer" düğmesi; artık var
+olmayan anahtarlardan bahseden eski metin düzeltildi. Ayarlar kaydırılabilir.
+
+### Doğrulama
+
+`assembleDebug`, tüm birim testleri (yeni: `PhoneReadingTest`,
+`WidgetSizingTest`, `InteropTest.phoneMessageShape`) ve `lintDebug` temiz.
+Lint 50 → 16 uyarı; kalanların hepsi bu turdan önce de vardı.
+
+Sürüm 0.15.0 / versionCode 47. **Masaüstü 1.3.0 ile birlikte yayınla.**

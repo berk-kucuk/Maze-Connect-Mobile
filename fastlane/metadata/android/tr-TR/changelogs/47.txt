@@ -1,0 +1,6 @@
+• Bilgisayarın panosu artık bu telefonu gösteriyor: pil, depolama, bellek, ağ, zil modu.
+• Telefonumu bul: bilgisayar bu telefonu sessizdeyken bile çaldırabilir.
+• Herhangi bir uygulamadan metin ve link bilgisayarın panosuna.
+• Widget'lar verilen boya uyuyor — artık kırpılmıyor, yarısı boş kalmıyor.
+• Yeni gezinme: beş sabit sekme, gerisi Daha fazla altında.
+• Güvenlik: eşleştirme cevabı yalnızca eşleşilen cihazdan kabul ediliyor.

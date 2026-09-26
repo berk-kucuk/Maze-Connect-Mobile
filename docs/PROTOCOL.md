@@ -108,9 +108,26 @@ side:
 * `sendMediaCommand` sends one `MediaAction`; the result comes back as the
   next `mediaState`.
 
+## The phone's side (`phoneStatus`, `findPhone`, `shareText`)
+
+The contract is in `Maze-Connect/docs/PROTOCOL.md` §§ phoneStatus, findPhone,
+shareText. On this side:
+
+* `phoneStatusRequest` is answered by `DeviceManager.handlePhoneStatusRequest`
+  with `PhoneStatusCollector` → `PhoneReading.toJson()`, which applies the
+  same bounds the computer re-checks, so nothing leaves that would be refused.
+  Refused out loud (`error`) when the capability is off for that computer or
+  the owner switched sharing off in Settings (`PhonePrefs`).
+* `findPhone` raises `DeviceEvent.FindPhone`; the service rings through
+  `FindPhoneRinger` and reports the stop back with
+  `DeviceManager.reportRinging(false)`.
+* `DeviceManager.shareText` refuses, before sending, anything the computer
+  would refuse — over 16 384 characters, or `Message.isAllowedText` false.
+
 ## Scope
 
 v2 dropped notification mirroring, clipboard sync and ping/find-my-device:
 KDE Connect already does those. What remains is managing the computer itself,
-file transfer, and — since 0.14.0 — the computer's media players. Deferred
-indefinitely: battery sharing, remote input, SMS.
+file transfer, the computer's media players (0.14.0), and — since 0.15.0 —
+this phone's status on the computer, find-my-phone, and sharing text to the
+computer. Deferred: remote input, SMS.

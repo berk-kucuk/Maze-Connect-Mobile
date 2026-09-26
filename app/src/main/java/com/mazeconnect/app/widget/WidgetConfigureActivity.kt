@@ -67,6 +67,16 @@ abstract class WidgetConfigureActivity : ComponentActivity() {
             finish()
             return
         }
+        // Exported, so any app can start this with any id. Only an id that is
+        // really one of this app's widgets may be configured — otherwise a
+        // stranger could write mappings for ids that are not ours.
+        val info = runCatching {
+            AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
+        }.getOrNull()
+        if (info == null || info.provider.packageName != packageName) {
+            finish()
+            return
+        }
 
         // Needed to read the paired device list, whether or not the app was
         // already running — placing a widget is as likely to be the first

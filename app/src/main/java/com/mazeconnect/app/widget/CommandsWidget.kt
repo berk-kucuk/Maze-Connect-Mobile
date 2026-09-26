@@ -41,6 +41,16 @@ class CommandsWidget : AppWidgetProvider() {
         for (id in appWidgetIds) WidgetDeviceConfig.clear(context, id)
     }
 
+    /** A resize: pick the layout for the new size (see [WidgetSizing]). */
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        manager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: android.os.Bundle,
+    ) {
+        manager.updateAppWidget(appWidgetId, render(context, appWidgetId))
+    }
+
     companion object {
         const val EXTRA_COMMAND_ID = "commandId"
         const val EXTRA_COMMAND_LABEL = "commandLabel"
@@ -66,16 +76,31 @@ class CommandsWidget : AppWidgetProvider() {
             manager.updateAppWidget(appWidgetId, render(context, appWidgetId))
         }
 
-        private fun render(context: Context, appWidgetId: Int): RemoteViews {
-            val views = RemoteViews(context.packageName, R.layout.widget_commands)
+        /**
+         * Two layouts: the normal one with the computer's name above the
+         * cells, and a single row for a short cell (a 4x1 in landscape, a
+         * dense grid). Sizes measured against each layout — see the comment
+         * at the top of the two XML files.
+         */
+        private val LAYOUTS = listOf(
+            SizedLayout(R.layout.widget_commands_slim, 180f, 44f),
+            SizedLayout(R.layout.widget_commands, 180f, 88f),
+        )
+
+        private fun render(context: Context, appWidgetId: Int): RemoteViews =
+            WidgetSizing.build(context, appWidgetId, LAYOUTS, R.layout.widget_commands) { layout ->
+                draw(context, appWidgetId, layout)
+            }
+
+        private fun draw(context: Context, appWidgetId: Int, layout: Int): RemoteViews {
+            val views = RemoteViews(context.packageName, layout)
             val store = WidgetSnapshotStore(context)
             val deviceId = WidgetDeviceConfig.deviceIdFor(context, appWidgetId)
                 ?: store.mostRecentDeviceId()
             val stored = deviceId?.let { store.load(it) }
             val pinned = deviceId?.let { store.pinnedCommands(it) } ?: emptyList()
 
-            views.setOnClickPendingIntent(
-                R.id.widget_host,
+            val openApp =
                 PendingIntent.getActivity(
                     context, appWidgetId,
                     Intent(context, com.mazeconnect.app.MainActivity::class.java)
@@ -86,8 +111,11 @@ class CommandsWidget : AppWidgetProvider() {
                             }
                         },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                ),
-            )
+                )
+            // The whole card opens the app; each cell's own intent, set
+            // below, takes precedence inside the cell.
+            views.setOnClickPendingIntent(android.R.id.background, openApp)
+            views.setOnClickPendingIntent(R.id.widget_host, openApp)
 
             views.setTextViewText(
                 R.id.widget_host,
