@@ -355,6 +355,44 @@ class InteropTest {
     }
 
     @Test
+    fun mediaMessageShape() {
+        // Duplicated in TestInterop::mediaMessageShape.
+        assertEquals("media", Capability.MEDIA.wire)
+        assertTrue(Capability.MEDIA in Capability.SUPPORTED)
+
+        assertEquals("mediaRequest", MessageType.MEDIA_REQUEST.wire)
+        assertEquals("mediaState", MessageType.MEDIA_STATE.wire)
+        assertEquals("mediaCommand", MessageType.MEDIA_COMMAND.wire)
+
+        val request = JSONObject(String(Message.mediaRequest(1, true).toJson(), Charsets.UTF_8))
+        assertTrue(request.getBoolean("subscribe"))
+
+        val command = JSONObject(
+            String(Message.mediaCommand(2, "spotify", "seek", 61000).toJson(), Charsets.UTF_8)
+        )
+        assertEquals("spotify", command.getString("player"))
+        assertEquals("seek", command.getString("action"))
+        assertEquals(61000L, command.getLong("value"))
+
+        val state = JSONObject(
+            String(
+                Message.mediaState(3, JSONObject().put("active", "spotify")).toJson(),
+                Charsets.UTF_8,
+            )
+        )
+        assertEquals("spotify", state.getJSONObject("media").getString("active"))
+
+        // The desktop's action table, name for name.
+        assertEquals(
+            listOf(
+                "play", "pause", "playPause", "next", "previous", "stop",
+                "seek", "setVolume", "systemVolume", "systemMute",
+            ),
+            com.mazeconnect.core.protocol.MediaAction.entries.map { it.wire },
+        )
+    }
+
+    @Test
     fun sasKnownAnswer() {
         // Duplicated in TestInterop::sasKnownAnswer.
         val a = ByteArray(91) { it.toByte() }

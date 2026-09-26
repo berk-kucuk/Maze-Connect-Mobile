@@ -44,7 +44,16 @@ enum class MessageType(val wire: String) {
     PONG("pong"),
 
     /** Computer -> phone only: clipboard text to open there. */
-    OPEN_ON_PHONE("openOnPhone");
+    OPEN_ON_PHONE("openOnPhone"),
+
+    /** Phone -> computer: send the players now, and (un)subscribe to changes. */
+    MEDIA_REQUEST("mediaRequest"),
+
+    /** Computer -> phone: the players, their track and position. */
+    MEDIA_STATE("mediaState"),
+
+    /** Phone -> computer: one action from a fixed table. */
+    MEDIA_COMMAND("mediaCommand");
 
     companion object {
         fun from(wire: String?): MessageType? = entries.firstOrNull { it.wire == wire }
@@ -408,6 +417,30 @@ class Message private constructor(
         /** Sent by the computer; here so the interop vectors can build it. */
         fun openOnPhone(counter: Long, text: String) =
             build(MessageType.OPEN_ON_PHONE, counter) { put("text", text) }
+
+        /**
+         * Ask for the computer's players. Always answered once; with
+         * [subscribe] the computer also pushes every change until a request
+         * with false, or until the link drops.
+         */
+        fun mediaRequest(counter: Long, subscribe: Boolean) =
+            build(MessageType.MEDIA_REQUEST, counter) { put("subscribe", subscribe) }
+
+        /**
+         * One action on one player. [action] must be one of [MediaAction];
+         * [player] is an id the computer handed out in mediaState. The
+         * computer looks both up — neither is ever used to build anything.
+         */
+        fun mediaCommand(counter: Long, player: String, action: String, value: Long) =
+            build(MessageType.MEDIA_COMMAND, counter) {
+                put("player", player)
+                put("action", action)
+                put("value", value)
+            }
+
+        /** Sent by the computer; here so the interop vectors can build it. */
+        fun mediaState(counter: Long, media: JSONObject) =
+            build(MessageType.MEDIA_STATE, counter) { put("media", media) }
     }
 }
 

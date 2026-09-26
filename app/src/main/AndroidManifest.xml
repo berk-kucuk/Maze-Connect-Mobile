@@ -279,6 +279,12 @@
             android:name=".service.OpenOnPhoneReceiver"
             android:exported="false" />
 
+        <!-- The media notification's buttons. Not exported — only the
+             notification's own PendingIntents reach it. -->
+        <receiver
+            android:name=".service.MediaActionReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

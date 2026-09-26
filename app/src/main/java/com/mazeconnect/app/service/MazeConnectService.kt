@@ -52,6 +52,7 @@ class MazeConnectService : Service() {
     private var serviceScope: CoroutineScope? = null
     private var eventsJob: Job? = null
     private var liveStatusJob: Job? = null
+    private var mediaNotification: MediaNotification? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -108,6 +109,8 @@ class MazeConnectService : Service() {
         }
         networkCallback = null
         LiveStatusNotification.clear(this)
+        mediaNotification?.stop()
+        mediaNotification = null
         serviceScope?.cancel()
         serviceScope = null
         eventsJob = null
@@ -213,6 +216,7 @@ class MazeConnectService : Service() {
             attachManager(manager)
             watchOpenOnPhone(manager)
             watchLiveStatus(manager)
+            watchMedia(manager)
         }
         // START_STICKY: if the system reclaims us under pressure, the link
         // should come back rather than silently staying down.
@@ -282,6 +286,17 @@ class MazeConnectService : Service() {
                 }
             }
         }
+    }
+
+    /**
+     * The computer's now-playing as a phone media control — lock screen,
+     * quick settings, a paired watch. Owned by the service because those are
+     * exactly the places someone looks without opening the app.
+     */
+    private fun watchMedia(manager: DeviceManager) {
+        if (mediaNotification != null) return
+        val scope = serviceScope ?: return
+        mediaNotification = MediaNotification(this, manager).also { it.start(scope) }
     }
 
     private fun postOpenOnPhoneNotification(text: String) {

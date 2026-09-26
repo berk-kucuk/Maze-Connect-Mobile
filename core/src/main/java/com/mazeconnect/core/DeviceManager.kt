@@ -11,6 +11,8 @@ import com.mazeconnect.core.keystore.AndroidKeyStoreManager
 import com.mazeconnect.core.pairing.PairedDevice
 import com.mazeconnect.core.pairing.PairedDeviceStore
 import com.mazeconnect.core.protocol.Capability
+import com.mazeconnect.core.protocol.MediaAction
+import com.mazeconnect.core.protocol.MediaState
 import com.mazeconnect.core.protocol.Message
 import com.mazeconnect.core.protocol.MessageType
 import com.mazeconnect.core.protocol.SystemStatus
@@ -281,6 +283,24 @@ class DeviceManager(
 
     private val _transfers = MutableStateFlow<List<IncomingTransfer>>(emptyList())
     val transfers: StateFlow<List<IncomingTransfer>> = _transfers.asStateFlow()
+
+    /** Each connected computer's media players, while someone is watching. */
+    private val _media = MutableStateFlow<Map<String, MediaState>>(emptyMap())
+    val media: StateFlow<Map<String, MediaState>> = _media.asStateFlow()
+
+    /**
+     * Who wants each computer's players pushed, by a token per consumer —
+     * the Media screen and the media notification each hold their own. The
+     * computer is subscribed while any token is held and unsubscribed when
+     * the last one goes, so neither consumer can switch the other off.
+     */
+    private val mediaInterest =
+        java.util.concurrent.ConcurrentHashMap<String, MutableSet<String>>()
+
+    /** Which device each accepted incoming transfer belongs to. Transfer ids
+     *  are the sender's small numbers; without the owner, one computer could
+     *  write into or cancel another's transfer. */
+    private val incomingOwner = java.util.concurrent.ConcurrentHashMap<Long, String>()
 
     /** Files we offered and the computer has not answered yet, by transfer
      *  id. The bytes are only read once it accepts. */
@@ -723,19 +743,32 @@ class DeviceManager(
             // immediately still finds everything it needs.
             ourNonce = ourNonce,
         )
-        links[id] = link
+        // Newest link wins. A reconnect usually arrives while the previous
+        // link is still here, half-open, waiting out its heartbeat. It used to
+        // be overwritten in the map and left running — and when it finally
+        // timed out, its onClosed removed the map entry by id, which by then
+        // was the *new* link: the phone showed the computer as disconnected
+        // while connected, dropped its pending answers, and dialled again.
+        val previous = links.put(id, link)
+        if (previous != null && previous !== link) {
+            previous.connection.close("replaced by a newer link")
+        }
 
         connection.onMessage = { message -> handleMessage(link, message) }
         connection.onData = { transferId, chunk -> handleData(link, transferId, chunk) }
         connection.onClosed = { reason ->
             if (reason != null) Log.w(TAG, "link closed: $reason")
-            links.remove(link.deviceId)
-            markConnected(link.deviceId, false)
-            // Anything we were waiting on died with the link. Left behind,
-            // a stale entry would make the *next* answer look unsolicited
-            // and be dropped — which is how a reconnected dashboard stays
-            // blank even though the link came back.
-            forgetPendingWork(link.deviceId)
+            // Only if this link is still the device's current one; a link
+            // that was replaced must not take its successor down with it.
+            val wasCurrent = links.remove(link.deviceId, link)
+            if (wasCurrent) {
+                markConnected(link.deviceId, false)
+                // Anything we were waiting on died with the link. Left behind,
+                // a stale entry would make the *next* answer look unsolicited
+                // and be dropped — which is how a reconnected dashboard stays
+                // blank even though the link came back.
+                forgetPendingWork(link.deviceId)
+            }
             // A pairing in progress dies with its link, and saying so here is
             // not cosmetic. `_pendingPairing` is a single slot guarded by
             // "one pairing at a time": requestPairingAt() returns early while
@@ -746,7 +779,7 @@ class DeviceManager(
             // poisons every later attempt, and the phone can then never pair
             // with anything again until the process restarts. That is exactly
             // the "pressing Pair on the computer does nothing" fault.
-            if (_pendingPairing.value?.deviceId == link.deviceId) {
+            if (wasCurrent && _pendingPairing.value?.deviceId == link.deviceId) {
                 _pendingPairing.value = null
             }
             if (reason != null && !link.trusted) {
@@ -759,7 +792,7 @@ class DeviceManager(
         // its hello the instant the link comes up, so that window is hit
         // almost every time.
         if (!connection.start()) {
-            links.remove(id)
+            links.remove(id, link)
             return false
         }
 
@@ -870,19 +903,31 @@ class DeviceManager(
 
             MessageType.FILE_COMPLETE -> handleFileComplete(link, message)
 
+            MessageType.MEDIA_STATE -> handleMediaState(link, message)
+
             MessageType.FILE_CANCEL, MessageType.FILE_REJECT -> {
                 val id = message.integer("transferId", 0xFFFFFFFFL) ?: return
                 // Could be either direction: a file we were receiving, or one
-                // we offered and the computer declined.
-                outgoing.remove(id)
-                receiver.abort(id)
+                // we offered and the computer declined — but only ever this
+                // computer's own transfer.
+                val ours = outgoing[id]?.deviceId == link.deviceId
+                val theirs = incomingOwner[id] == link.deviceId
+                val offered = _fileOffer.value?.let {
+                    it.transferId == id && it.deviceId == link.deviceId
+                } == true
+                if (!ours && !theirs && !offered) return
+                if (ours) outgoing.remove(id)
+                if (theirs) {
+                    receiver.abort(id)
+                    incomingOwner.remove(id)
+                }
                 updateTransfer(id) {
                     it.copy(
                         done = true,
                         error = message.string("reason", 256) ?: "cancelled by the sender",
                     )
                 }
-                if (_fileOffer.value?.transferId == id) _fileOffer.value = null
+                if (offered) _fileOffer.value = null
             }
 
             else -> {
@@ -963,7 +1008,18 @@ class DeviceManager(
                 return
             }
         } else {
-            links.remove(link.deviceId)
+            // An unpaired key may not take the id of a paired computer, or of
+            // any other link. Ids are not secret — every beacon carries one —
+            // and this map is keyed by them: a stranger on the Wi-Fi saying
+            // "I am your computer" used to replace the real computer's entry
+            // here, and when it hung up, the real link went with it. Anyone on
+            // the network could keep the phone disconnected that way.
+            val holder = links[id]
+            if (store.forId(id) != null || (holder != null && holder !== link)) {
+                link.connection.close("unpaired key claims the id of a known device")
+                return
+            }
+            links.remove(link.deviceId, link)
             link.deviceId = id
             links[id] = link
             _pendingPairing.value?.let { pending ->
@@ -975,6 +1031,17 @@ class DeviceManager(
         link.deviceName = name
         link.peerCapabilities =
             Capability.fromNames(message.stringList("capabilities", 32, 32))
+
+        // Now that the computer has said what it offers, pick the media
+        // subscription back up if something here still wants it — the link
+        // it was made on is gone, and the computer forgot it with that link.
+        if (link.trusted && !mediaInterest[link.deviceId].isNullOrEmpty()) {
+            if (allowed(link, Capability.MEDIA)) {
+                sendMediaRequest(link, subscribe = true)
+            } else {
+                _media.put(link.deviceId, mediaRefusal(link))
+            }
+        }
     }
 
     private fun handlePairRequest(link: Link, message: Message) {
@@ -1119,7 +1186,7 @@ class DeviceManager(
         }
         // Data for a transfer the user never accepted. Refusing is the safe
         // answer: bytes arriving is not consent to write them.
-        if (!receiver.has(transferId)) {
+        if (!receiver.has(transferId) || incomingOwner[transferId] != link.deviceId) {
             link.connection.close("data for an unaccepted transfer")
             return
         }
@@ -1399,6 +1466,7 @@ class DeviceManager(
             return
         }
 
+        incomingOwner[offer.transferId] = offer.deviceId
         _transfers.value = _transfers.value + IncomingTransfer(
             transferId = offer.transferId,
             filename = offer.filename,
@@ -1415,7 +1483,8 @@ class DeviceManager(
     private fun handleFileComplete(link: Link, message: Message) {
         if (!allowed(link, Capability.FILE_TRANSFER)) return
         val transferId = message.integer("transferId", 0xFFFFFFFFL) ?: return
-        if (!receiver.has(transferId)) return
+        if (!receiver.has(transferId) || incomingOwner[transferId] != link.deviceId) return
+        incomingOwner.remove(transferId)
 
         receiver.finish(transferId).fold(
             onSuccess = { file ->
@@ -1664,6 +1733,125 @@ class DeviceManager(
         _ai.value[deviceId]?.let { _ai.put(deviceId, it.copy(streaming = false)) }
         _commands.value[deviceId]?.let { _commands.put(deviceId, it.copy(running = emptySet())) }
         _guard.value[deviceId]?.let { _guard.put(deviceId, it.copy(pending = null)) }
+
+        // Players from a computer that is gone are not "paused", they are
+        // unknown — and the lock-screen controls must not keep offering them.
+        _media.remove(deviceId)
+
+        // Transfers cannot continue over a new link: the computer ties them
+        // to the connection they started on. A half-written file left open
+        // here also held one of the receiver's few concurrent slots.
+        for ((id, owner) in incomingOwner.entries.toList()) {
+            if (owner != deviceId) continue
+            incomingOwner.remove(id)
+            receiver.abort(id)
+            updateTransfer(id) { it.copy(done = true, error = "the computer disconnected") }
+        }
+        for ((id, file) in outgoing.entries.toList()) {
+            if (file.deviceId != deviceId) continue
+            outgoing.remove(id)
+            updateTransfer(id) { it.copy(done = true, error = "the computer disconnected") }
+        }
+        if (_fileOffer.value?.deviceId == deviceId) _fileOffer.value = null
+    }
+
+    // ---- Media -------------------------------------------------------------
+
+    /**
+     * Start or stop wanting [targetDeviceId]'s players pushed, on behalf of
+     * [token] (one per consumer: the screen, the notification).
+     *
+     * Holding interest subscribes the computer; releasing the last token
+     * unsubscribes it. Interest outlives the link — it is picked back up in
+     * the next hello — so a Wi-Fi blip does not silently end the controls.
+     */
+    fun setMediaInterest(targetDeviceId: String, token: String, wanted: Boolean) {
+        val tokens = mediaInterest.getOrPut(targetDeviceId) {
+            java.util.Collections.newSetFromMap(
+                java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+            )
+        }
+        val wasEmpty = tokens.isEmpty()
+        if (wanted) tokens.add(token) else tokens.remove(token)
+        val link = links[targetDeviceId] ?: return
+        if (wanted && !allowed(link, Capability.MEDIA)) {
+            // Say why rather than leave the screen on "asking…" for a request
+            // that will never be sent. Until the computer has said hello its
+            // capabilities are unknown; handleHello() retries then.
+            if (link.helloReceived) _media.put(targetDeviceId, mediaRefusal(link))
+            return
+        }
+        if (wanted) {
+            // Also when already subscribed: a new consumer wants the current
+            // state now, not at the next change.
+            sendMediaRequest(link, subscribe = true)
+        } else if (tokens.isEmpty() && !wasEmpty) {
+            sendMediaRequest(link, subscribe = false)
+            _media.remove(targetDeviceId)
+        }
+    }
+
+    /** Drop [token]'s interest in every computer. */
+    fun releaseMediaInterest(token: String) {
+        for (deviceId in mediaInterest.keys.toList()) setMediaInterest(deviceId, token, false)
+    }
+
+    private fun mediaRefusal(link: Link): MediaState = MediaState(
+        players = emptyList(),
+        activeId = null,
+        systemVolume = null,
+        systemMuted = false,
+        error = if (Capability.MEDIA !in link.peerCapabilities) {
+            "This computer's Maze Connect does not offer media control. Update it to " +
+                "1.2.0 or later — and restart it after updating (quit from the tray, then " +
+                "open it again), because an update does not replace a copy that is running."
+        } else {
+            "Media control is switched off for this computer on this phone."
+        },
+        notice = null,
+        receivedAtMs = System.currentTimeMillis(),
+    )
+
+    private fun sendMediaRequest(link: Link, subscribe: Boolean) {
+        if (!allowed(link, Capability.MEDIA)) return
+        scope.launch {
+            link.connection.send(Message.mediaRequest(link.connection.nextCounter(), subscribe))
+        }
+    }
+
+    /**
+     * One action on one of [targetDeviceId]'s players.
+     *
+     * Returns false when there is nothing to send it over. What the computer
+     * did about it arrives as the next mediaState — including, when it did
+     * nothing, a notice saying why.
+     */
+    fun sendMediaCommand(
+        targetDeviceId: String,
+        playerId: String,
+        action: MediaAction,
+        value: Long = 0,
+    ): Boolean {
+        val link = links[targetDeviceId] ?: return false
+        if (!allowed(link, Capability.MEDIA)) return false
+        scope.launch {
+            link.connection.send(
+                Message.mediaCommand(link.connection.nextCounter(), playerId, action.wire, value)
+            )
+        }
+        return true
+    }
+
+    private fun handleMediaState(link: Link, message: Message) {
+        if (!allowed(link, Capability.MEDIA)) return
+        // Only while something here asked. Being paired does not by itself
+        // entitle a computer to put a now-playing card on the lock screen.
+        if (mediaInterest[link.deviceId].isNullOrEmpty()) return
+        val state = MediaState.parse(
+            message.unvalidatedObject("media"),
+            System.currentTimeMillis(),
+        ) ?: return
+        _media.put(link.deviceId, state)
     }
 
     // ---- maze-guard ------------------------------------------------------

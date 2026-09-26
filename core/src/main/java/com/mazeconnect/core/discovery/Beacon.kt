@@ -74,7 +74,11 @@ class Beacon(private val scope: CoroutineScope) {
         stop()
 
         val opened = try {
-            MulticastSocket(PORT).apply { joinGroupOnEveryInterface(this) }
+            MulticastSocket(PORT).apply {
+                // Needed to send the subnet-broadcast copy in announce().
+                broadcast = true
+                joinGroupOnEveryInterface(this)
+            }
         } catch (_: Exception) {
             // Multicast is filtered on plenty of networks. Not fatal: the UI
             // still offers pairing by address.
@@ -221,6 +225,26 @@ class Beacon(private val scope: CoroutineScope) {
                 )
             )
         }
+
+        // The same announcement as a broadcast on each Wi-Fi/Ethernet subnet.
+        // Many home routers drop multicast between their Wi-Fi and Ethernet
+        // sides (IGMP snooping with no querier), and a subnet broadcast
+        // crosses them — which is the difference between the computer seeing
+        // this phone and not. Tunnels are skipped: a phone VPN would
+        // otherwise carry the announcement off the LAN entirely.
+        val interfaces = runCatching { NetworkInterface.getNetworkInterfaces() }.getOrNull()
+        while (interfaces != null && interfaces.hasMoreElements()) {
+            val nif = interfaces.nextElement()
+            val usable = runCatching {
+                nif.isUp && !nif.isLoopback && !nif.isPointToPoint && !nif.isVirtual &&
+                    VPN_PREFIXES.none { nif.name.startsWith(it) }
+            }.getOrDefault(false)
+            if (!usable) continue
+            for (address in nif.interfaceAddresses) {
+                val broadcast = address.broadcast ?: continue
+                runCatching { sock.send(DatagramPacket(payload, payload.size, broadcast, PORT)) }
+            }
+        }
     }
 
     private suspend fun listenLoop(sock: MulticastSocket) {
@@ -307,3 +331,6 @@ class Beacon(private val scope: CoroutineScope) {
         private const val MIN_ACCEPT_INTERVAL_MS = 1_000L
     }
 }
+
+/** Interface name prefixes that are tunnels, not the LAN. */
+private val VPN_PREFIXES = listOf("tun", "tap", "wg", "ppp", "ipsec", "rmnet", "clat")

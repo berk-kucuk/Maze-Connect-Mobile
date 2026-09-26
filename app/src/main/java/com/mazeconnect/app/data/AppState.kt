@@ -13,6 +13,8 @@ import com.mazeconnect.core.GuardStateSnapshot
 import com.mazeconnect.core.SystemStatusState
 import com.mazeconnect.core.crypto.Fingerprint
 import com.mazeconnect.core.protocol.Capability
+import com.mazeconnect.core.protocol.MediaAction
+import com.mazeconnect.core.protocol.MediaState
 import com.mazeconnect.core.discovery.DiscoveredDevice
 import com.mazeconnect.app.service.Link
 import com.mazeconnect.app.service.LiveStatusNotification
@@ -311,6 +313,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---- Media -----------------------------------------------------------
+
+    val media: StateFlow<MediaState?> =
+        combine(manager.media, selectedDeviceId) { map, id -> id?.let(map::get) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** The Media screen is showing [deviceId] (or nothing, with null). Held
+     *  under the screen's own token, beside the notification's. */
+    fun watchMedia(deviceId: String?) {
+        manager.releaseMediaInterest(MEDIA_SCREEN_TOKEN)
+        if (deviceId != null) manager.setMediaInterest(deviceId, MEDIA_SCREEN_TOKEN, true)
+    }
+
+    fun mediaCommand(deviceId: String, playerId: String, action: MediaAction, value: Long = 0) {
+        if (!manager.sendMediaCommand(deviceId, playerId, action, value)) {
+            _status.value = "That computer is not reachable right now."
+        }
+    }
+
     fun setCapability(deviceId: String, capability: String, enabled: Boolean) {
         val cap = Capability.from(capability) ?: return
         manager.setCapabilityEnabled(deviceId, cap, enabled)
@@ -452,6 +473,11 @@ class AppState(application: Application) : AndroidViewModel(application) {
         // killing the link, the beacon and the listening socket while the
         // notification stayed up claiming otherwise. The link outlives the UI;
         // stopping it is the service's job, and the user's decision.
+        //
+        // The one exception is interest the screen itself registered: the
+        // Media screen is gone, so its subscription goes with it (the
+        // notification holds its own, under a different token).
+        manager.releaseMediaInterest(MEDIA_SCREEN_TOKEN)
         super.onCleared()
     }
 
@@ -493,3 +519,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
         address = "${address.hostAddress}:$port",
     )
 }
+
+/** The Media screen's interest token — see DeviceManager.setMediaInterest. */
+private const val MEDIA_SCREEN_TOKEN = "screen"

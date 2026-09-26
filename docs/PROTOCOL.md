@@ -92,9 +92,25 @@ A field that fails is dropped rather than defaulted. A dashboard that invents
 cannot tell a quiet machine from a broken probe — which is also why `unknown`
 is kept as a third state and never folded into `inactive`.
 
+## Media (`media`)
+
+The full contract is in `Maze-Connect/docs/PROTOCOL.md` § media. On this
+side:
+
+* `DeviceManager.setMediaInterest(device, token, wanted)` — the Media screen
+  and the media notification each hold a token; the computer is subscribed
+  (`mediaRequest` with `subscribe: true`) while any token is held, and
+  re-subscribed in the next `hello` after a reconnect.
+* A `mediaState` is dropped unless something here holds interest in that
+  computer. `MediaState.parse` bounds every field before it reaches the
+  screen or the lock screen (ids `[A-Za-z0-9_.-]{1,64}`, text cleaned and
+  capped, volumes range-checked, at most 12 players).
+* `sendMediaCommand` sends one `MediaAction`; the result comes back as the
+  next `mediaState`.
+
 ## Scope
 
 v2 dropped notification mirroring, clipboard sync and ping/find-my-device:
 KDE Connect already does those. What remains is managing the computer itself,
-plus file transfer. Deferred indefinitely: media/MPRIS control, battery
-sharing, remote input, SMS.
+file transfer, and — since 0.14.0 — the computer's media players. Deferred
+indefinitely: battery sharing, remote input, SMS.

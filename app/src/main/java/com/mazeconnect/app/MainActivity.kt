@@ -48,6 +48,7 @@ import com.mazeconnect.app.ui.screens.AiChatScreen
 import com.mazeconnect.app.ui.screens.CommandsScreen
 import com.mazeconnect.app.ui.screens.DashboardScreen
 import com.mazeconnect.app.ui.screens.GuardScreen
+import com.mazeconnect.app.ui.screens.MediaScreen
 import com.mazeconnect.app.ui.screens.DevicesScreen
 import com.mazeconnect.app.ui.screens.PairingDialog
 import com.mazeconnect.app.ui.screens.SettingsScreen
@@ -139,6 +140,7 @@ private fun MazeConnectApp(state: AppState) {
     val commands by state.commands.collectAsState()
     val ai by state.ai.collectAsState()
     val guard by state.guard.collectAsState()
+    val media by state.media.collectAsState()
     val fileOffer by state.fileOffer.collectAsState()
     val transfers by state.transfers.collectAsState()
 
@@ -211,14 +213,21 @@ private fun MazeConnectApp(state: AppState) {
                         onRefresh = state::refreshSystemStatus,
                         onManualRefresh = state::refreshDashboard,
                     )
-                    2 -> CommandsScreen(
+                    2 -> MediaScreen(
+                        devices = devices,
+                        selectedDeviceId = selectedDeviceId,
+                        state = media,
+                        onWatch = state::watchMedia,
+                        onCommand = state::mediaCommand,
+                    )
+                    3 -> CommandsScreen(
                         devices = devices,
                         selectedDeviceId = selectedDeviceId,
                         state = commands,
                         onRefresh = state::refreshCommands,
                         onRun = state::runCommand,
                     )
-                    3 -> AiChatScreen(
+                    4 -> AiChatScreen(
                         devices = devices,
                         selectedDeviceId = selectedDeviceId,
                         state = ai,
@@ -227,13 +236,13 @@ private fun MazeConnectApp(state: AppState) {
                         onPickModel = state::pickAiModel,
                         onClear = state::clearAiTranscript,
                     )
-                    4 -> TransfersScreen(
+                    5 -> TransfersScreen(
                         transfers = transfers,
                         inboxPath = state.inboxPath,
                         onClearFinished = state::clearFinishedTransfers,
                         onSendFile = state::sendFile,
                     )
-                    5 -> GuardScreen(
+                    6 -> GuardScreen(
                         devices = devices,
                         selectedDeviceId = selectedDeviceId,
                         state = guard,
@@ -276,7 +285,9 @@ private fun MazeConnectApp(state: AppState) {
                 // "AI" rather than "Maze AI": you are already inside Maze Connect
                 // and the masthead says MAZE, so the prefix bought nothing but
                 // width in the one place width is scarce.
-                items = listOf("Devices", "Dashboard", "Commands", "AI", "Files", "Guard", "Settings"),
+                items = listOf(
+                    "Devices", "Dashboard", "Media", "Commands", "AI", "Files", "Guard", "Settings",
+                ),
                 selected = tab,
                 onSelect = { tab = it },
             )
@@ -388,6 +399,7 @@ private fun BottomNav(items: List<String>, selected: Int, onSelect: (Int) -> Uni
     val icons = listOf(
         R.drawable.ic_devices,
         R.drawable.ic_dashboard,
+        R.drawable.ic_media,
         R.drawable.ic_commands,
         R.drawable.ic_ai,
         R.drawable.ic_files,

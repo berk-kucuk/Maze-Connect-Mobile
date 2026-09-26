@@ -87,6 +87,7 @@ class PairedDeviceStore(context: Context) {
         devices.clear()
         if (!file.exists()) return true // nothing paired yet is normal
 
+        var migrated = false
         return try {
             val array = JSONArray(file.readText())
             for (i in 0 until array.length()) {
@@ -100,13 +101,24 @@ class PairedDeviceStore(context: Context) {
                 val capNames = buildList {
                     if (caps != null) for (j in 0 until caps.length()) add(caps.optString(j))
                 }
+                // Capabilities this build has that the record never heard of
+                // are granted, as everything is at pairing. The set used to be
+                // frozen at pairing time, so media control (0.14.0) stayed off
+                // for every computer paired before it — and the Media screen
+                // waited forever. Only capabilities *new to the record* are
+                // added, so one the user switched off stays off.
+                val known = obj.optJSONArray("knownCapabilities")?.let { arr ->
+                    Capability.fromNames((0 until arr.length()).map { arr.optString(it) })
+                } ?: Capability.LEGACY_KNOWN
+                val added = Capability.SUPPORTED - known
+                if (added.isNotEmpty()) migrated = true
                 val device = PairedDevice(
                     deviceId = obj.optString("deviceId"),
                     deviceName = obj.optString("deviceName"),
                     deviceType = obj.optString("deviceType"),
                     publicKey = key,
                     pairedAtEpochSeconds = obj.optLong("pairedAt"),
-                    enabledCapabilities = Capability.fromNames(capNames),
+                    enabledCapabilities = Capability.fromNames(capNames) + added,
                     lastAddress = obj.optString("lastAddress").takeIf { it.isNotEmpty() },
                     lastPort = obj.optInt("lastPort", -1).takeIf { it in 1..65535 },
                 )
@@ -114,6 +126,7 @@ class PairedDeviceStore(context: Context) {
                 // loaded half-trusted: a truncated key must never become a pin.
                 if (device.isValid) devices.add(device)
             }
+            if (migrated) save()
             true
         } catch (_: Exception) {
             false
@@ -135,6 +148,7 @@ class PairedDeviceStore(context: Context) {
                         "enabledCapabilities",
                         JSONArray(Capability.toNames(device.enabledCapabilities)),
                     )
+                    put("knownCapabilities", JSONArray(Capability.toNames(Capability.SUPPORTED)))
                     if (device.lastAddress != null && device.lastPort != null) {
                         put("lastAddress", device.lastAddress)
                         put("lastPort", device.lastPort)

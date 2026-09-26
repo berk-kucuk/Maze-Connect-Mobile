@@ -51,4 +51,6 @@
     <string name="guard_widget_unreachable">No paired computer answered. Check that it is on the same network and Maze Connect is running there.</string>
     <string name="guard_widget_refused">Your computer refused the request.</string>
     <string name="guard_no_computer">No paired computer is reachable right now.</string>
+    <string name="media_channel_name">Computer media</string>
+    <string name="media_channel_description">Play, pause and skip what is playing on your computer, from the lock screen and the notification shade.</string>
 </resources>

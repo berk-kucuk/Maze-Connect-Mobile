@@ -8,6 +8,6 @@ class VersionTest {
     fun protocolVersionMatchesDesktop() {
         // Pinned so a bump on one client alone fails here rather than in the
         // field: a version mismatch refuses the link outright.
-        assertEquals(3, PROTOCOL_VERSION)
+        assertEquals(4, PROTOCOL_VERSION)
     }
 }

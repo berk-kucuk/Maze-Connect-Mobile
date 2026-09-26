@@ -26,7 +26,11 @@ enum class Capability(val wire: String) {
 
     /** Push the desktop's clipboard to the phone to open — a URL is opened
      *  directly, anything else is copied to the phone's clipboard. */
-    OPEN_ON_PHONE("openOnPhone");
+    OPEN_ON_PHONE("openOnPhone"),
+
+    /** See the computer's media players and control them: play, pause,
+     *  skip, seek, and the player and system volume. */
+    MEDIA("media");
 
     companion object {
         /** Unknown names degrade to null rather than being guessed at. */
@@ -42,7 +46,7 @@ enum class Capability(val wire: String) {
          * Mirrors the desktop client's `supportedCapabilities()`.
          */
         val SUPPORTED: Set<Capability> =
-            setOf(FILE_TRANSFER, SYSTEM_STATUS, COMMANDS, AI, GUARD_CONTROL, OPEN_ON_PHONE)
+            setOf(FILE_TRANSFER, SYSTEM_STATUS, COMMANDS, AI, GUARD_CONTROL, OPEN_ON_PHONE, MEDIA)
 
         /**
          * What a newly paired computer may be asked for: **everything.**
@@ -60,6 +64,12 @@ enum class Capability(val wire: String) {
          * the privileged one.
          */
         val DEFAULT_ENABLED: Set<Capability> = SUPPORTED
+
+        /** Every capability that existed before a pairing record started
+         *  listing which ones it knew about (0.14.0). Only for reading such
+         *  older records — see PairedDeviceStore.load(). */
+        val LEGACY_KNOWN: Set<Capability> =
+            setOf(FILE_TRANSFER, SYSTEM_STATUS, COMMANDS, AI, GUARD_CONTROL, OPEN_ON_PHONE)
 
         fun fromNames(names: Collection<String>): Set<Capability> =
             names.mapNotNull { from(it) }.toSet()
