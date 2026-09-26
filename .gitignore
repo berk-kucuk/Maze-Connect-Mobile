@@ -14,8 +14,11 @@ captures/
 *.keystore
 *.jks
 
-keystore/
-keystore.properties
+# Anchored to the root. Unanchored, `keystore/` also matched the source
+# package core/.../keystore/, so AndroidKeyStoreManager.kt was never
+# committed and a clean clone did not compile — F-Droid's build found it.
+/keystore/
+/keystore.properties
 dist/
 
 # OS / editor junk

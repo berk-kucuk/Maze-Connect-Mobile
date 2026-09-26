@@ -1,0 +1,31 @@
+Categories:
+  - Connectivity
+  - File Transfer
+  - Remote Controller
+License: GPL-3.0-only
+AuthorName: Berk Küçük
+AuthorEmail: dev.berkkucukk@gmail.com
+WebSite: https://github.com/berk-kucuk/MazeLinux
+SourceCode: https://github.com/berk-kucuk/Maze-Connect-Mobile
+IssueTracker: https://github.com/berk-kucuk/Maze-Connect-Mobile/issues
+Changelog: https://github.com/berk-kucuk/Maze-Connect-Mobile/blob/HEAD/docs/HANDOFF.md
+
+AutoName: Maze Connect
+
+RepoType: git
+Repo: https://github.com/berk-kucuk/Maze-Connect-Mobile.git
+
+Builds:
+  - versionName: 0.15.0
+    versionCode: 47
+    commit: v0.15.0
+    subdir: app
+    gradle:
+      - yes
+    gradleprops:
+      - mazeconnect.fdroid=true
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 0.15.0
+CurrentVersionCode: 47
