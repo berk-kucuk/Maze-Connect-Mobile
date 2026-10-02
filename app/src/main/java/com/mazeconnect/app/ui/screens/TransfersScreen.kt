@@ -163,6 +163,8 @@ fun TransfersScreen(
                                     transfer.error != null -> transfer.error!!
                                     transfer.done && transfer.outgoing ->
                                         "Sent · ${humanSize(transfer.total)}"
+                                    transfer.done && transfer.savedTo != null ->
+                                        "In ${transfer.savedTo} · ${humanSize(transfer.total)}"
                                     transfer.done -> "Saved · ${humanSize(transfer.total)}"
                                     else -> {
                                         val verb = if (transfer.outgoing) "Sending" else "Receiving"
@@ -174,7 +176,9 @@ fun TransfersScreen(
                                 color = colors.dim,
                             )
                         }
-                        if (transfer.done && transfer.error == null && transfer.path != null) {
+                        if (transfer.done && transfer.error == null && transfer.savedUri != null) {
+                            MazeButton("Open", { openReceived(context, transfer) })
+                        } else if (transfer.done && transfer.error == null && transfer.path != null) {
                             MazeButton("Save", {
                                 pendingSave = transfer.path
                                 runCatching { saver.launch(File(transfer.path!!).name) }
@@ -243,6 +247,24 @@ private suspend fun saveCopy(
  * Android, and this grants read access to exactly the file the user chose
  * instead of to the directory it sits in.
  */
+/**
+ * Open a received file: from Downloads when it was published there, from
+ * the inbox otherwise.
+ */
+fun openReceived(context: Context, transfer: IncomingTransfer) {
+    val saved = transfer.savedUri
+    if (saved == null) {
+        transfer.path?.let { openFile(context, it) }
+        return
+    }
+    val uri = android.net.Uri.parse(saved)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(Intent.createChooser(intent, "Open with")) }
+}
+
 private fun openFile(context: Context, path: String) {
     val file = File(path)
     // A path outside what file_paths.xml declares throws here, and that is a

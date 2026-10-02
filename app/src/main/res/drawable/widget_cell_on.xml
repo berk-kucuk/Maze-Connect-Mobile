@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A killswitch in its protected state: solid paper, so "blocked" is
+     readable from across the room without reading the word. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#330A0A0B">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#F2F1EC" />
+            <corners android:radius="@dimen/widget_inner_radius" />
+        </shape>
+    </item>
+</ripple>

@@ -55,10 +55,10 @@ import kotlin.math.roundToInt
  *
  * The small icon is what the system draws in the status-bar chip and on the
  * lock screen, so it is the app's own mark rather than a generic glyph —
- * `ic_notification`, the launcher logo cropped out of its adaptive-icon safe
- * zone and flattened to a silhouette. Using the launcher asset directly would
- * have shown the logo at 55% of an already tiny canvas, because an adaptive
- * foreground is mostly padding by design.
+ * `ic_notification`, the reduced mark the desktop tray also uses, filling
+ * 20 of its 24dp. Using the launcher asset directly would have shown the logo
+ * at 55% of an already tiny canvas, because an adaptive foreground is mostly
+ * padding by design.
  *
  * Nothing here degrades to a worse experience below API 36: it does not
  * publish at all. The home-screen widgets already cover that ground, and a

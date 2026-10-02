@@ -207,6 +207,7 @@ private fun MazeConnectApp(
     val inputState by state.inputState.collectAsState()
     val sharedFolder by state.sharedFolder.collectAsState()
     val previews by state.previews.collectAsState()
+    val folderDownloads by state.folderDownloads.collectAsState()
     var clipboardSync by remember { mutableStateOf(state.clipboardSyncEnabled) }
     val morePage = morePageName?.let { name -> MorePage.entries.firstOrNull { it.name == name } }
     val colors = LocalMazeColors.current
@@ -325,6 +326,9 @@ private fun MazeConnectApp(
                                     onFetch = state::fetchFromFolder,
                                     previews = previews,
                                     onPreview = state::requestPreview,
+                                    downloads = folderDownloads,
+                                    transfers = transfers,
+                                    onForgetDownload = state::forgetDownload,
                                 )
                             } else {
                                 TransfersScreen(

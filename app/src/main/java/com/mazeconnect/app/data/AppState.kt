@@ -371,13 +371,27 @@ class AppState(application: Application) : AndroidViewModel(application) {
     fun fetchFromFolder(path: String) {
         val id = selectedDeviceId.value ?: return
         _status.value = if (manager.fetchFromFolder(id, path)) {
-            "Downloading ${path.substringAfterLast('/')}…"
+            "Downloading ${path.substringAfterLast('/')} to Download/Maze Connect…"
         } else {
             "That computer does not offer its shared folder."
         }
     }
 
     val previews: StateFlow<Map<String, com.mazeconnect.core.Preview>> = manager.previews
+
+    /** This computer's shared-folder downloads, by path in the folder. */
+    val folderDownloads: StateFlow<Map<String, com.mazeconnect.core.FolderDownload>> =
+        combine(manager.downloads, selectedDeviceId) { map, id ->
+            if (id == null) emptyMap() else {
+                val prefix = "$id|"
+                map.filterKeys { it.startsWith(prefix) }.mapKeys { it.key.removePrefix(prefix) }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** Clear a failed download so its row offers Download again. */
+    fun forgetDownload(path: String) {
+        selectedDeviceId.value?.let { manager.forgetDownload(it, path) }
+    }
 
     fun requestPreview(path: String, large: Boolean) {
         selectedDeviceId.value?.let { manager.requestPreview(it, path, large) }

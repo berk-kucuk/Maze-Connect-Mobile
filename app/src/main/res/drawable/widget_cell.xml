@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One tappable cell. Hairline only: a filled cell would read as "on", and
-     which state counts as "on" is exactly the thing the words must decide. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#0F0F0F" />
-    <stroke android:width="1dp" android:color="#33F2F1EC" />
-    <corners android:radius="10dp" />
-</shape>
+<!-- A tappable cell at rest: a faint paper wash and a hairline. The ripple
+     is the press feedback — a widget press has no other. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33F2F1EC">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0DF2F1EC" />
+            <stroke android:width="1dp" android:color="#14F2F1EC" />
+            <corners android:radius="@dimen/widget_inner_radius" />
+        </shape>
+    </item>
+</ripple>

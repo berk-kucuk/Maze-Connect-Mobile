@@ -1,16 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The widget type scale, in one place.
+  The widget design system, in one place.
+
+  Monochrome like the app: paper on near-black, with state carried by fill
+  and weight — a blocked switch is a filled cell, a fresh reading a filled
+  dot — never by hue.
 
   Every widget layout is measured against these sizes (see WidgetSizing), so
   they are not a matter of taste per file: change one here and re-measure the
   layouts' declared sizes in the widget classes. Font padding is off on every
-  style — with it on, a line is several dp taller than its text, and the
-  arithmetic that keeps a layout inside its cells stops being arithmetic.
+  style, so a line is exactly 1.17 × its text size and the arithmetic in each
+  layout's header comment stays arithmetic.
 -->
 <resources>
     <color name="widget_paper">#F2F1EC</color>
-    <color name="widget_dim">#8A8A90</color>
+    <color name="widget_dim">#8E8E93</color>
 
     <style name="WidgetText">
         <item name="android:textColor">@color/widget_paper</item>
@@ -25,15 +29,38 @@
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
-    <!-- "2 min ago". Coarse on purpose — see DashboardWidget.ageLabel. -->
+    <style name="WidgetText.Host.Small">
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- "2 min ago". Coarse on purpose — see WidgetChrome.ageLabel. -->
     <style name="WidgetText.Age">
         <item name="android:textColor">@color/widget_dim</item>
         <item name="android:textSize">10sp</item>
     </style>
 
+    <!-- "GUARD", "COMMANDS": what a control widget is for. -->
+    <style name="WidgetText.Tag">
+        <item name="android:textColor">@color/widget_dim</item>
+        <item name="android:textSize">9sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.14</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
     <style name="WidgetText.Label">
         <item name="android:textColor">@color/widget_dim</item>
         <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="WidgetText.Label.Small">
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <!-- A reading's name beside its ring: paper, since it heads the cell. -->
+    <style name="WidgetText.Title">
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
     <style name="WidgetText.Value">
@@ -42,11 +69,30 @@
         <item name="android:fontFeatureSettings">tnum</item>
     </style>
 
-    <!-- The one big number per tile in the grid. -->
-    <style name="WidgetText.Big">
-        <item name="android:textSize">18sp</item>
+    <style name="WidgetText.Value.Small">
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="WidgetText.Value.Large">
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="WidgetText.Stat">
+        <item name="android:textSize">14sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <!-- The percentage inside a ring. -->
+    <style name="WidgetText.Ring">
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="WidgetText.Ring.Small">
+        <item name="android:textSize">10sp</item>
     </style>
 
     <style name="WidgetText.Detail">
@@ -57,6 +103,23 @@
     <style name="WidgetText.Hint">
         <item name="android:textColor">@color/widget_dim</item>
         <item name="android:textSize">12sp</item>
+        <item name="android:lineSpacingMultiplier">1.15</item>
+    </style>
+
+    <!-- A control cell's name and state. -->
+    <style name="WidgetText.CellName">
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="WidgetText.CellState">
+        <item name="android:textColor">@color/widget_dim</item>
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <style name="WidgetText.Pill">
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
     <style name="WidgetBar" parent="android:Widget.ProgressBar.Horizontal">
@@ -65,5 +128,18 @@
         <item name="android:progressDrawable">@drawable/widget_bar</item>
         <item name="android:minHeight">0dp</item>
         <item name="android:maxHeight">20dp</item>
+    </style>
+
+    <!-- A determinate ring: the horizontal style (so it takes a progress
+         value) with a ring for a drawable, and the style's 20 dp height cap
+         lifted so the ring is as tall as it is wide. -->
+    <style name="WidgetRing" parent="android:Widget.ProgressBar.Horizontal">
+        <item name="android:indeterminate">false</item>
+        <item name="android:max">100</item>
+        <item name="android:progressDrawable">@drawable/widget_ring</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:maxHeight">96dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:maxWidth">96dp</item>
     </style>
 </resources>

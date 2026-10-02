@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A ring gauge for a determinate ProgressBar (style WidgetRing): a faint
+     full track, and a paper arc from twelve o'clock whose sweep is the
+     level ProgressBar sets. Ratios are of the view's width, so one drawable
+     serves every ring size. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape
+            android:shape="ring"
+            android:innerRadiusRatio="2.5"
+            android:thicknessRatio="11"
+            android:useLevel="false">
+            <solid android:color="#26F2F1EC" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <rotate
+            android:fromDegrees="270"
+            android:toDegrees="270"
+            android:pivotX="50%"
+            android:pivotY="50%">
+            <shape
+                android:shape="ring"
+                android:innerRadiusRatio="2.5"
+                android:thicknessRatio="11"
+                android:useLevel="true">
+                <solid android:color="#F2F1EC" />
+            </shape>
+        </rotate>
+    </item>
+</layer-list>

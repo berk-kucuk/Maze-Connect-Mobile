@@ -84,7 +84,7 @@ class CommandsWidget : AppWidgetProvider() {
          */
         private val LAYOUTS = listOf(
             SizedLayout(R.layout.widget_commands_slim, 180f, 44f),
-            SizedLayout(R.layout.widget_commands, 180f, 88f),
+            SizedLayout(R.layout.widget_commands, 180f, 97f),
         )
 
         private fun render(context: Context, appWidgetId: Int): RemoteViews =
@@ -117,12 +117,7 @@ class CommandsWidget : AppWidgetProvider() {
             views.setOnClickPendingIntent(android.R.id.background, openApp)
             views.setOnClickPendingIntent(R.id.widget_host, openApp)
 
-            views.setTextViewText(
-                R.id.widget_host,
-                stored?.first?.hostname?.ifEmpty { null }
-                    ?: context.getString(R.string.widget_no_computer),
-            )
-            views.setTextViewText(R.id.widget_age, "")
+            WidgetChrome.header(views, context, stored?.first?.hostname, stored?.second)
 
             // No computer at all vs. a computer with nothing pinned yet are
             // different situations, and the hint says which one it is —
@@ -148,6 +143,12 @@ class CommandsWidget : AppWidgetProvider() {
 
             views.setViewVisibility(R.id.command_row, View.VISIBLE)
             views.setViewVisibility(R.id.widget_hint, View.GONE)
+            // The 2x2 layout's second row only when there is something to
+            // put in it; otherwise the first row sits centred in the card.
+            views.setViewVisibility(
+                R.id.command_row_2,
+                if (pinned.size > 2) View.VISIBLE else View.GONE,
+            )
 
             for (i in CELLS.indices) {
                 val command = pinned.getOrNull(i)

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar glyph: the reduced mark from
+     Maze-Connect/packaging/icons/src/gen_icons.py (the one the desktop tray
+     uses at 16-32px), with its 640-unit content box mapped onto 20 of the
+     24dp (viewport 768, offset -128). The system draws only its alpha. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="768"
+    android:viewportHeight="768">
+    <group
+        android:translateX="-128"
+        android:translateY="-128">
+        <path
+            android:pathData="M256,340V256H768V340M256,684V768H768V684"
+            android:strokeWidth="88"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="square"
+            android:strokeLineJoin="miter" />
+        <path
+            android:pathData="M320,512H704"
+            android:strokeWidth="88"
+            android:strokeColor="#FFFFFFFF" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M432,432h160v160h-160zM192,448h128v128h-128zM704,448h128v128h-128z" />
+    </group>
+</vector>

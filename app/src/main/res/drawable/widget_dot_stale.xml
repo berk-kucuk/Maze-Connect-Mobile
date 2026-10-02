@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The reading is old, or there is none: a hollow ring. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#00000000" />
+    <stroke android:width="1.5dp" android:color="#8E8E93" />
+    <size android:width="7dp" android:height="7dp" />
+</shape>

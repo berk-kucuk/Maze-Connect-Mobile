@@ -1,7 +1,13 @@
 package com.mazeconnect.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +41,8 @@ import com.mazeconnect.app.ui.components.MazeButton
 import com.mazeconnect.app.ui.components.MazeLabel
 import com.mazeconnect.app.ui.theme.LocalMazeColors
 import com.mazeconnect.app.ui.theme.MazeColors
+import com.mazeconnect.core.FolderDownload
+import com.mazeconnect.core.IncomingTransfer
 import com.mazeconnect.core.SharedFolderState
 
 /**
@@ -45,6 +53,11 @@ import com.mazeconnect.core.SharedFolderState
  * a picture opens a preview first, with Download beneath it; tapping any
  * other file downloads it into Files, without the usual "accept?" prompt,
  * because the tap was the request.
+ *
+ * Every file row carries its own download state — a button, then progress,
+ * then Open — because a download that shows nothing on the row it started
+ * from looks exactly like a button that does nothing. Downloads land in
+ * Download/Maze Connect, where the Files app finds them.
  */
 @Composable
 fun SharedFolderScreen(
@@ -56,8 +69,25 @@ fun SharedFolderScreen(
     modifier: Modifier = Modifier,
     previews: Map<String, com.mazeconnect.core.Preview> = emptyMap(),
     onPreview: (path: String, large: Boolean) -> Unit = { _, _ -> },
+    downloads: Map<String, FolderDownload> = emptyMap(),
+    transfers: List<IncomingTransfer> = emptyList(),
+    onForgetDownload: (String) -> Unit = {},
 ) {
     val colors = LocalMazeColors.current
+    val context = LocalContext.current
+    fun stateOf(full: String) = downloadState(downloads[full], transfers)
+    // One action for the row, the button and the viewer alike.
+    fun act(full: String) {
+        when (val st = stateOf(full)) {
+            is DownloadState.Done -> openReceived(context, st.transfer)
+            is DownloadState.Failed -> {
+                onForgetDownload(full)
+                onFetch(full)
+            }
+            DownloadState.Idle -> onFetch(full)
+            else -> Unit
+        }
+    }
     var viewing by androidx.compose.runtime.saveable.rememberSaveable {
         androidx.compose.runtime.mutableStateOf<String?>(null)
     }
@@ -125,7 +155,7 @@ fun SharedFolderScreen(
                                     when {
                                         entry.dir -> onList(full)
                                         isPicture(entry.name) -> viewing = full
-                                        else -> onFetch(full)
+                                        else -> act(full)
                                     }
                                 }
                                 .padding(vertical = 10.dp),
@@ -158,6 +188,7 @@ fun SharedFolderScreen(
                                 }
                             }
                             Spacer(Modifier.width(14.dp))
+                            val dl = if (entry.dir) DownloadState.Idle else stateOf(full)
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     entry.name,
@@ -167,16 +198,19 @@ fun SharedFolderScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    if (entry.dir) "Folder" else humanBytes(entry.size),
+                                    if (entry.dir) "Folder" else dl.caption(entry.size),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = colors.dim,
+                                    color = if (dl is DownloadState.Failed) MazeColors.Paper else colors.dim,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            Text(
-                                if (entry.dir) "›" else if (isPicture(entry.name)) "◉" else "↓",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = colors.dim,
-                            )
+                            Spacer(Modifier.width(10.dp))
+                            if (entry.dir) {
+                                Text("›", style = MaterialTheme.typography.titleLarge, color = colors.dim)
+                            } else {
+                                DownloadAction(dl, onClick = { act(full) })
+                            }
                         }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
                     }
@@ -192,10 +226,10 @@ fun SharedFolderScreen(
             name = entry.name,
             size = entry.size,
             preview = previews["${target.deviceId}|$shown|large"],
-            onDownload = {
-                onFetch(shown)
-                viewing = null
-            },
+            download = stateOf(shown),
+            // The viewer stays open: the button below turns into the
+            // download's progress, then into Open.
+            onDownload = { act(shown) },
             onClose = { viewing = null },
         )
     }
@@ -214,6 +248,7 @@ fun PicturePreview(
     name: String,
     size: Long,
     preview: com.mazeconnect.core.Preview?,
+    download: DownloadState = DownloadState.Idle,
     onDownload: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -255,7 +290,135 @@ fun PicturePreview(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            MazeButton("Download ${humanBytes(size)}", onDownload, modifier = Modifier.fillMaxWidth())
+            when (download) {
+                is DownloadState.Waiting, is DownloadState.Receiving, DownloadState.Saving -> {
+                    val fraction = (download as? DownloadState.Receiving)?.fraction
+                    Text(
+                        download.caption(size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.dim,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (fraction == null) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(3.dp),
+                            color = MazeColors.Paper,
+                            trackColor = colors.hairline,
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier.fillMaxWidth().height(3.dp),
+                            color = MazeColors.Paper,
+                            trackColor = colors.hairline,
+                            drawStopIndicator = {},
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
+                is DownloadState.Done -> {
+                    Text(
+                        download.caption(size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.dim,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    MazeButton("Open", onDownload, modifier = Modifier.fillMaxWidth())
+                }
+                is DownloadState.Failed -> {
+                    Text(
+                        download.caption(size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MazeColors.Paper,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    MazeButton("Try again", onDownload, modifier = Modifier.fillMaxWidth())
+                }
+                DownloadState.Idle ->
+                    MazeButton("Download ${humanBytes(size)}", onDownload, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+/** Where one file's download is, joined from its fetch and its transfer. */
+sealed interface DownloadState {
+    data object Idle : DownloadState
+    /** Asked for; the computer has not started sending yet. */
+    data object Waiting : DownloadState
+    data class Receiving(val received: Long, val total: Long) : DownloadState {
+        val fraction: Float get() = if (total > 0) (received.toFloat() / total).coerceIn(0f, 1f) else 0f
+    }
+    /** All bytes are here; being moved into Downloads. */
+    data object Saving : DownloadState
+    data class Done(val transfer: IncomingTransfer) : DownloadState
+    data class Failed(val reason: String) : DownloadState
+}
+
+fun downloadState(fetch: FolderDownload?, transfers: List<IncomingTransfer>): DownloadState {
+    if (fetch == null) return DownloadState.Idle
+    fetch.error?.let { return DownloadState.Failed(it) }
+    val id = fetch.transferId ?: return DownloadState.Waiting
+    // The row appears when the offer is accepted, a moment after the id.
+    val t = transfers.firstOrNull { it.transferId == id && !it.outgoing } ?: return DownloadState.Waiting
+    return when {
+        t.error != null -> DownloadState.Failed(t.error!!)
+        t.done -> DownloadState.Done(t)
+        t.total > 0 && t.received >= t.total -> DownloadState.Saving
+        else -> DownloadState.Receiving(t.received, t.total)
+    }
+}
+
+private fun DownloadState.caption(size: Long): String = when (this) {
+    DownloadState.Idle -> humanBytes(size)
+    DownloadState.Waiting -> "Waiting for the computer…"
+    is DownloadState.Receiving -> "${humanBytes(received)} of ${humanBytes(total)} · ${(fraction * 100).toInt()}%"
+    DownloadState.Saving -> "Saving to Downloads…"
+    is DownloadState.Done -> transfer.savedTo?.let { "In $it · tap to open" }
+        ?: "Downloaded · ${humanBytes(size)}"
+    is DownloadState.Failed -> "Failed: $reason"
+}
+
+/** The row's trailing control: Download, progress, Open or retry. */
+@Composable
+private fun DownloadAction(state: DownloadState, onClick: () -> Unit) {
+    val colors = LocalMazeColors.current
+    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        when (state) {
+            DownloadState.Waiting, DownloadState.Saving -> CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = MazeColors.Paper,
+                trackColor = colors.hairline,
+                strokeWidth = 2.dp,
+            )
+            is DownloadState.Receiving -> CircularProgressIndicator(
+                progress = { state.fraction },
+                modifier = Modifier.size(22.dp),
+                color = MazeColors.Paper,
+                trackColor = colors.hairline,
+                strokeWidth = 2.dp,
+                gapSize = 0.dp,
+            )
+            is DownloadState.Done -> MazeButton("Open", onClick, primary = false)
+            else -> Box(
+                Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, colors.hairlineStrong, CircleShape)
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (state is DownloadState.Failed) {
+                    Text("↻", style = MaterialTheme.typography.titleMedium, color = MazeColors.Paper)
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_download),
+                        contentDescription = "Download",
+                        tint = MazeColors.Paper,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
         }
     }
 }

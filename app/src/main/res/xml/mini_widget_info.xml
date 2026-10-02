@@ -24,7 +24,7 @@
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
     android:configure="com.mazeconnect.app.widget.DashboardWidgetConfigureActivity"
-    android:initialLayout="@layout/widget_mini"
+    android:initialLayout="@layout/widget_mini_tall"
     android:previewLayout="@layout/widget_preview_mini"
     android:description="@string/widget_mini_description"
     android:resizeMode="horizontal|vertical"

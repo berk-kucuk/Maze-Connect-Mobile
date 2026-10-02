@@ -182,6 +182,19 @@ data class SharedFolderState(
     val fetchError: String? = null,
 )
 
+/**
+ * One file this phone asked for from a computer's shared folder, followed
+ * from the tap until it is in Downloads.
+ *
+ * [transferId] is null until the computer has promised the transfer; from
+ * then on its progress is that transfer's row in [DeviceManager.transfers].
+ */
+data class FolderDownload(
+    val path: String,
+    val transferId: Long? = null,
+    val error: String? = null,
+)
+
 /** A preview a computer sent, or the state of asking for one. */
 class Preview(
     /** JPEG bytes, validated (see PreviewImage and DeviceManager). */
@@ -211,6 +224,14 @@ data class IncomingTransfer(
     val error: String? = null,
     /** Where it landed, once finished. Receiving only. */
     val path: String? = null,
+    /**
+     * A content:// URI when the file was published to the shared Downloads
+     * collection instead of staying in the inbox. [path] is null then: the
+     * inbox copy is gone.
+     */
+    val savedUri: String? = null,
+    /** Where [savedUri] is, in words a person can find ("Download/Maze Connect"). */
+    val savedTo: String? = null,
     /** True when this phone is the sender. */
     val outgoing: Boolean = false,
 )
@@ -353,7 +374,14 @@ class DeviceManager(
     /** Files we offered and the computer has not answered yet, by transfer
      *  id. The bytes are only read once it accepts. */
     private val outgoing = java.util.concurrent.ConcurrentHashMap<Long, OutgoingFile>()
-    private val nextTransferId = java.util.concurrent.atomic.AtomicLong(1)
+    /** Ids for files this phone offers. The computer numbers its own offers
+     *  from 1 and both directions share one id space on the wire and in each
+     *  side's transfer list, so ours start in the upper half — and at a random
+     *  point in it, so a restarted app does not reuse the ids of rows the
+     *  computer is still showing. */
+    private val nextTransferId = java.util.concurrent.atomic.AtomicLong(
+        0x8000_0000L + java.security.SecureRandom().nextInt(0x4000_0000)
+    )
 
     private class OutgoingFile(
         val deviceId: String,
@@ -433,13 +461,21 @@ class DeviceManager(
     /** Our folder requests in flight: id -> (device, path). An answer is only
      *  taken for a request of ours, from the device it went to. */
     private val folderRequests = java.util.concurrent.ConcurrentHashMap<Long, Pair<String, String>>()
-    private val fetchRequests = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    /** Our fetches in flight: request id -> (device, path). */
+    private val fetchRequests = java.util.concurrent.ConcurrentHashMap<Long, Pair<String, String>>()
     private val nextFolderRequestId = java.util.concurrent.atomic.AtomicLong(1)
 
     /** Transfer ids a computer promised in answer to *our* fetch. An offer
      *  with one of these ids, from that computer, is what we asked for and is
      *  accepted without a prompt; every other offer still asks. */
-    private val expectedFetches = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    private val expectedFetches = java.util.concurrent.ConcurrentHashMap<Long, Pair<String, String>>()
+
+    /** Accepted transfers that answer a fetch: moved to Downloads on arrival. */
+    private val fetchedTransfers = java.util.concurrent.ConcurrentHashMap<Long, Pair<String, String>>()
+
+    /** Every fetch, keyed "device|path", so the folder can show its state. */
+    private val _downloads = MutableStateFlow<Map<String, FolderDownload>>(emptyMap())
+    val downloads: StateFlow<Map<String, FolderDownload>> = _downloads.asStateFlow()
 
     private val clipboardWindows = java.util.concurrent.ConcurrentHashMap<String, LongArray>()
 
@@ -1043,6 +1079,7 @@ class DeviceManager(
                 if (theirs) {
                     receiver.abort(id)
                     incomingOwner.remove(id)
+                    fetchedTransfers.remove(id)
                 }
                 updateTransfer(id) {
                     it.copy(
@@ -1547,11 +1584,22 @@ class DeviceManager(
         // without a prompt — the tap on the file was the answer. Any other
         // offer, including one reusing a promised id from another computer,
         // falls through to the prompt below.
-        if (expectedFetches.remove(transferId, link.deviceId)) {
+        val fetch = expectedFetches[transferId]
+        if (fetch != null && fetch.first == link.deviceId && expectedFetches.remove(transferId, fetch)) {
+            fetchedTransfers[transferId] = fetch
             acceptOffer(
                 link,
                 PendingFileOffer(link.deviceId, link.deviceName, transferId, filename, size),
             )
+            // Refused before it began (no room, an unsafe name): say so on
+            // the row that was tapped, not only in the log.
+            if (!receiver.has(transferId)) {
+                fetchedTransfers.remove(transferId)
+                _downloads.put(
+                    downloadKey(fetch.first, fetch.second),
+                    FolderDownload(fetch.second, error = "this phone could not start the download"),
+                )
+            }
             return
         }
 
@@ -1613,7 +1661,7 @@ class DeviceManager(
         }
 
         incomingOwner[offer.transferId] = offer.deviceId
-        _transfers.value = _transfers.value + IncomingTransfer(
+        _transfers.value = withoutFinished(offer.transferId) + IncomingTransfer(
             transferId = offer.transferId,
             filename = offer.filename,
             received = 0,
@@ -1632,8 +1680,13 @@ class DeviceManager(
         if (!receiver.has(transferId) || incomingOwner[transferId] != link.deviceId) return
         incomingOwner.remove(transferId)
 
+        val fetch = fetchedTransfers.remove(transferId)
         receiver.finish(transferId).fold(
             onSuccess = { file ->
+                if (fetch != null) {
+                    publishFetched(link.deviceId, transferId, file)
+                    return
+                }
                 updateTransfer(transferId) {
                     it.copy(
                         done = true,
@@ -1646,10 +1699,49 @@ class DeviceManager(
             onFailure = { error ->
                 val reason = error.message ?: "transfer failed"
                 updateTransfer(transferId) { it.copy(done = true, error = reason) }
+                fetch?.let { (device, path) ->
+                    _downloads.put(downloadKey(device, path), FolderDownload(path, transferId, reason))
+                }
                 emit(DeviceEvent.FileFailed(link.deviceId, reason))
             },
         )
     }
+
+    /**
+     * A file the user downloaded from a shared folder goes where downloads
+     * go. The inbox is the app's own external directory, which Android 11
+     * and later hide from every file manager — so a tap on Download that
+     * left the file there looked, to the user, like nothing had happened.
+     *
+     * Moved rather than copied, so a large file does not take up its space
+     * twice. Where the platform has no Downloads collection to write to
+     * without a permission (Android 9), it stays in the inbox, which that
+     * version's file managers can still reach.
+     */
+    private fun publishFetched(deviceId: String, transferId: Long, file: File) {
+        updateTransfer(transferId) { it.copy(received = it.total) }
+        scope.launch(Dispatchers.IO) {
+            val uri = com.mazeconnect.core.filetransfer.DownloadsPublisher.publish(appContext, file)
+            if (uri != null) file.delete()
+            updateTransfer(transferId) {
+                it.copy(
+                    done = true,
+                    received = it.total,
+                    path = if (uri == null) file.absolutePath else null,
+                    savedUri = uri?.toString(),
+                    savedTo = if (uri == null) null else
+                        com.mazeconnect.core.filetransfer.DownloadsPublisher.FOLDER_LABEL,
+                )
+            }
+            emit(DeviceEvent.FileReceived(deviceId, file.name, uri?.toString() ?: file.absolutePath))
+        }
+    }
+
+    /** The list minus a finished row reusing [transferId]: a computer that
+     *  restarted counts from 1 again, and a new transfer must get its own row
+     *  rather than have its progress written onto an old one. */
+    private fun withoutFinished(transferId: Long): List<IncomingTransfer> =
+        _transfers.value.filterNot { it.transferId == transferId && it.done }
 
     private fun updateTransfer(transferId: Long, edit: (IncomingTransfer) -> IncomingTransfer) {
         _transfers.value = _transfers.value.map {
@@ -1659,7 +1751,10 @@ class DeviceManager(
 
     /** Forget finished rows. The files stay where they were written. */
     fun clearFinishedTransfers() {
+        val cleared = _transfers.value.filter { it.done && !it.outgoing }.map { it.transferId }.toSet()
         _transfers.value = _transfers.value.filterNot { it.done }
+        // Their shared-folder rows go back to offering Download.
+        _downloads.value = _downloads.value.filterValues { it.transferId !in cleared }
     }
 
     val inboxPath: String get() = receiver.root.absolutePath
@@ -1687,7 +1782,7 @@ class DeviceManager(
         val transferId = nextTransferId.getAndIncrement()
         outgoing[transferId] = OutgoingFile(targetDeviceId, uri, name, size)
 
-        _transfers.value = _transfers.value + IncomingTransfer(
+        _transfers.value = withoutFinished(transferId) + IncomingTransfer(
             transferId = transferId,
             filename = name,
             received = 0,
@@ -1879,8 +1974,17 @@ class DeviceManager(
         }
         folderRequests.entries.removeIf { it.value.first == deviceId }
         previewRequests.entries.removeIf { it.value.first == deviceId }
-        fetchRequests.entries.removeIf { it.value == deviceId }
-        expectedFetches.entries.removeIf { it.value == deviceId }
+        fetchRequests.entries.removeIf { it.value.first == deviceId }
+        expectedFetches.entries.removeIf { it.value.first == deviceId }
+        // A fetch still waiting for its offer will never get one now. One
+        // already receiving is failed with its transfer, below or by it.
+        _downloads.value = _downloads.value.mapValues { (key, d) ->
+            if (key.startsWith("$deviceId|") && d.transferId == null && d.error == null) {
+                d.copy(error = "the computer disconnected")
+            } else {
+                d
+            }
+        }
         _folder.value[deviceId]?.let { _folder.put(deviceId, it.copy(loading = false)) }
         // Only this device's entries — commandRuns and aiRequestIds are
         // shared across every connected computer, and clearing the whole
@@ -1902,6 +2006,7 @@ class DeviceManager(
         for ((id, owner) in incomingOwner.entries.toList()) {
             if (owner != deviceId) continue
             incomingOwner.remove(id)
+            fetchedTransfers.remove(id)
             receiver.abort(id)
             updateTransfer(id) { it.copy(done = true, error = "the computer disconnected") }
         }
@@ -2126,8 +2231,9 @@ class DeviceManager(
         }
         if (path.isEmpty() || path.length > MAX_FOLDER_PATH_CHARS) return false
         val requestId = nextFolderRequestId.getAndIncrement()
-        fetchRequests[requestId] = targetDeviceId
+        fetchRequests[requestId] = targetDeviceId to path
         _folder.value[targetDeviceId]?.let { _folder.put(targetDeviceId, it.copy(fetchError = null)) }
+        _downloads.put(downloadKey(targetDeviceId, path), FolderDownload(path))
         scope.launch {
             link.connection.send(Message.folderFetch(link.connection.nextCounter(), requestId, path))
         }
@@ -2168,17 +2274,26 @@ class DeviceManager(
     private fun handleFolderFetchResult(link: Link, message: Message) {
         if (!allowed(link, Capability.SHARED_FOLDER)) return
         val requestId = message.integer("requestId", 0xFFFFFFFFL) ?: return
-        val owner = fetchRequests.remove(requestId) ?: return
+        val (owner, path) = fetchRequests.remove(requestId) ?: return
         if (owner != link.deviceId) return
         val transferId = message.integer("transferId", 0xFFFFFFFFL)
         val error = message.string("error", MAX_STATUS_ERROR_CHARS)
+        val key = downloadKey(owner, path)
         if (transferId != null && error == null) {
-            expectedFetches[transferId] = link.deviceId
+            expectedFetches[transferId] = owner to path
+            _downloads.put(key, FolderDownload(path, transferId))
         } else {
+            val reason = error ?: "the computer refused"
+            _downloads.put(key, FolderDownload(path, error = reason))
             _folder.value[link.deviceId]?.let {
-                _folder.put(link.deviceId, it.copy(fetchError = error ?: "the computer refused"))
+                _folder.put(link.deviceId, it.copy(fetchError = reason))
             }
         }
+    }
+
+    /** Forget a finished or failed fetch, so its row offers Download again. */
+    fun forgetDownload(targetDeviceId: String, path: String) {
+        _downloads.remove(downloadKey(targetDeviceId, path))
     }
 
     // ---- Previews ----------------------------------------------------------
@@ -2643,6 +2758,8 @@ class DeviceManager(
         private const val BACKGROUND_STATUS_INTERVAL_MS = 60_000L
 
         private const val MAX_FOLDER_ENTRIES = 500
+
+        private fun downloadKey(deviceId: String, path: String) = "$deviceId|$path"
         private const val MAX_PREVIEWS = 150
         private const val MAX_FOLDER_PATH_CHARS = 1024
 

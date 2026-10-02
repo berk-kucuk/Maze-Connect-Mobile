@@ -104,7 +104,7 @@ class ControlsWidget : AppWidgetProvider() {
          */
         private val LAYOUTS = listOf(
             SizedLayout(R.layout.widget_controls_slim, 250f, 46f),
-            SizedLayout(R.layout.widget_controls, 180f, 94f),
+            SizedLayout(R.layout.widget_controls, 180f, 100f),
         )
 
         private fun render(context: Context, appWidgetId: Int): RemoteViews =
@@ -137,12 +137,7 @@ class ControlsWidget : AppWidgetProvider() {
             views.setOnClickPendingIntent(android.R.id.background, openApp)
             views.setOnClickPendingIntent(R.id.widget_host, openApp)
 
-            views.setTextViewText(
-                R.id.widget_host,
-                stored?.first?.hostname?.ifEmpty { null }
-                    ?: context.getString(R.string.widget_no_computer),
-            )
-            views.setTextViewText(R.id.widget_age, "")
+            WidgetChrome.header(views, context, stored?.first?.hostname, stored?.second)
 
             if (guard.isEmpty()) {
                 views.setViewVisibility(R.id.control_row, View.GONE)
@@ -161,14 +156,19 @@ class ControlsWidget : AppWidgetProvider() {
                 val device = DEVICES[i]
                 val state = guard[device]
                 views.setTextViewText(NAMES[i], LABELS[i])
-                // The mark follows the state too: full strength when blocked
-                // — the protected reading — and dim otherwise, so a glance at
-                // the row says which switches are on without reading words.
-                views.setInt(
-                    ICONS[i],
-                    "setColorFilter",
-                    if (state == "off") 0xFFF2F1EC.toInt() else 0xFF7A7A7F.toInt(),
-                )
+                // The whole cell follows the state: solid paper when blocked
+                // — the protected reading — a quiet cell when allowed, and
+                // an empty outline when there is nothing to switch. A glance
+                // at the row says which switches are on without reading.
+                val (background, ink, sub) = when (state) {
+                    "off" -> Triple(R.drawable.widget_cell_on, WidgetChrome.INK, WidgetChrome.INK_DIM)
+                    "on" -> Triple(R.drawable.widget_cell, WidgetChrome.PAPER, WidgetChrome.DIM)
+                    else -> Triple(R.drawable.widget_cell_off, WidgetChrome.FAINT, WidgetChrome.FAINT)
+                }
+                views.setInt(CELLS[i], "setBackgroundResource", background)
+                views.setInt(ICONS[i], "setColorFilter", ink)
+                views.setTextColor(NAMES[i], ink)
+                views.setTextColor(STATES[i], sub)
                 views.setTextViewText(
                     STATES[i],
                     when (state) {

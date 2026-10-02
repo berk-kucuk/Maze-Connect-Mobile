@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Generated from widget_commands.xml with sample readings: the widget picker's preview.
-     Never drawn on a home screen, so the numbers cannot be mistaken for live
-     ones. Regenerate when the source layout changes. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    tools:ignore="HardcodedText"
+<!--
+  GENERATED — the widget picker's preview of widget_commands, with sample readings.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -13,83 +12,161 @@
     android:background="@drawable/widget_background"
     android:paddingHorizontal="10dp"
     android:paddingVertical="8dp">
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:baselineAligned="false">
+        <ImageView
+            android:id="@+id/widget_dot"
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:src="@drawable/widget_dot_live"
+            android:contentDescription="@null" />
         <TextView
             android:id="@+id/widget_host"
-            style="@style/WidgetText.Host"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            style="@style/WidgetText.Host.Small"
             android:layout_weight="1"
-            android:textSize="13sp"
-            android:text="msi" />
+            android:layout_marginStart="7dp"
+            android:text="maze-desktop" />
         <TextView
-            android:id="@+id/widget_age" android:text="just now"
-            style="@style/WidgetText.Age"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp" />
+            style="@style/WidgetText.Tag"
+            android:layout_marginStart="8dp"
+            android:text="Commands" />
     </LinearLayout>
-
     <LinearLayout
-        android:id="@+id/command_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
-        android:orientation="horizontal"
-        android:baselineAligned="false">
-        <LinearLayout android:id="@+id/command_1"
-            android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:layout_marginEnd="5dp" android:orientation="vertical"
-            android:gravity="center" android:background="@drawable/widget_cell"
-            android:minHeight="50dp"
-            android:paddingVertical="10dp" android:paddingHorizontal="4dp">
-            <TextView android:id="@+id/command_name_1" android:text="Lock screen" style="@style/WidgetText"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="13sp" android:maxLines="2" android:gravity="center" />
+        android:orientation="vertical"
+        android:id="@+id/command_row"
+        android:layout_marginTop="6dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:baselineAligned="false">
+            <LinearLayout
+                android:id="@+id/command_1"
+                android:layout_width="0dp"
+                android:layout_height="27dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_pill"
+                android:layout_marginEnd="5dp"
+                android:paddingHorizontal="11dp">
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_commands"
+                    android:tint="#8E8E93"
+                    android:contentDescription="@null" />
+                <TextView
+                    android:id="@+id/command_name_1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    style="@style/WidgetText.Pill"
+                    android:layout_weight="1"
+                    android:layout_marginStart="7dp"
+                    android:text="Update system" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/command_2"
+                android:layout_width="0dp"
+                android:layout_height="27dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_pill"
+                android:paddingHorizontal="11dp">
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_commands"
+                    android:tint="#8E8E93"
+                    android:contentDescription="@null" />
+                <TextView
+                    android:id="@+id/command_name_2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    style="@style/WidgetText.Pill"
+                    android:layout_weight="1"
+                    android:layout_marginStart="7dp"
+                    android:text="Lock screen" />
+            </LinearLayout>
         </LinearLayout>
-        <LinearLayout android:id="@+id/command_2"
-            android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:layout_marginEnd="5dp" android:orientation="vertical"
-            android:gravity="center" android:background="@drawable/widget_cell"
-            android:minHeight="50dp"
-            android:paddingVertical="10dp" android:paddingHorizontal="4dp">
-            <TextView android:id="@+id/command_name_2" android:text="Uptime" style="@style/WidgetText"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="13sp" android:maxLines="2" android:gravity="center" />
-        </LinearLayout>
-        <LinearLayout android:id="@+id/command_3"
-            android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:layout_marginEnd="5dp" android:orientation="vertical"
-            android:gravity="center" android:background="@drawable/widget_cell"
-            android:minHeight="50dp"
-            android:paddingVertical="10dp" android:paddingHorizontal="4dp">
-            <TextView android:id="@+id/command_name_3" android:text="Disk usage" style="@style/WidgetText"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="13sp" android:maxLines="2" android:gravity="center" />
-        </LinearLayout>
-        <LinearLayout android:id="@+id/command_4"
-            android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:orientation="vertical"
-            android:gravity="center" android:background="@drawable/widget_cell"
-            android:minHeight="50dp"
-            android:paddingVertical="10dp" android:paddingHorizontal="4dp">
-            <TextView android:id="@+id/command_name_4" android:text="Mute audio" style="@style/WidgetText"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:textSize="13sp" android:maxLines="2" android:gravity="center" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:baselineAligned="false"
+            android:id="@+id/command_row_2"
+            android:layout_marginTop="5dp">
+            <LinearLayout
+                android:id="@+id/command_3"
+                android:layout_width="0dp"
+                android:layout_height="27dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_pill"
+                android:layout_marginEnd="5dp"
+                android:paddingHorizontal="11dp">
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_commands"
+                    android:tint="#8E8E93"
+                    android:contentDescription="@null" />
+                <TextView
+                    android:id="@+id/command_name_3"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    style="@style/WidgetText.Pill"
+                    android:layout_weight="1"
+                    android:layout_marginStart="7dp"
+                    android:text="Backup home" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/command_4"
+                android:layout_width="0dp"
+                android:layout_height="27dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_pill"
+                android:paddingHorizontal="11dp">
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_commands"
+                    android:tint="#8E8E93"
+                    android:contentDescription="@null" />
+                <TextView
+                    android:id="@+id/command_name_4"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    style="@style/WidgetText.Pill"
+                    android:layout_weight="1"
+                    android:layout_marginStart="7dp"
+                    android:text="Restart audio" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-
     <TextView
         android:id="@+id/widget_hint"
-        style="@style/WidgetText.Hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        style="@style/WidgetText.Hint"
+        android:layout_marginTop="6dp"
         android:maxLines="3"
-        android:textSize="11sp"
-        android:visibility="gone" />
+        android:visibility="gone"
+        android:textSize="11sp" />
 </LinearLayout>

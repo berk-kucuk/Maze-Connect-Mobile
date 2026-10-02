@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated to match Maze-Connect/packaging/icons/src/gen_icons.py: the
+     1024 icon grid is mapped onto the 72dp the launcher shows (viewport 1536,
+     offset 256), so the mark sits on the tile exactly as on the
+     desktop, with the same ring sizes as Maze AI. -->
+<!-- Themed-icon layer (Android 13+): the same mark without the glow, since
+     the launcher only reads its alpha. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1536"
+    android:viewportHeight="1536">
+    <group
+        android:translateX="256"
+        android:translateY="256">
+        <!-- Outer and inner ring of the maze, both opened left and right. -->
+        <path
+            android:pathData="M212,392V212H812V392M212,632V812H812V632M336,436V336H688V436M336,588V688H688V588"
+            android:strokeWidth="44"
+            android:strokeColor="#F4F4F6"
+            android:strokeLineCap="square"
+            android:strokeLineJoin="miter" />
+        <!-- The route through it: endpoint, path, hollow centre, path, endpoint. -->
+        <path
+            android:pathData="M252,512H424M600,512H772"
+            android:strokeWidth="44"
+            android:strokeColor="#F4F4F6" />
+        <path
+            android:pathData="M444,444h136v136h-136z"
+            android:strokeWidth="40"
+            android:strokeColor="#F4F4F6" />
+        <path
+            android:fillColor="#F4F4F6"
+            android:pathData="M172,472h80v80h-80zM772,472h80v80h-80z" />
+    </group>
+</vector>

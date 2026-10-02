@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The reading is fresh (see WidgetChrome.FRESH_MS). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#F2F1EC" />
+    <size android:width="7dp" android:height="7dp" />
+</shape>

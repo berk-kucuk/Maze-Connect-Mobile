@@ -18,18 +18,24 @@ class WidgetSizingTest {
     private fun pick(w: Int, h: Int): String =
         when (WidgetSizing.pick(w.toFloat(), h.toFloat(), dashboard).key) {
             DashboardWidget.Style.MINI -> "mini"
+            DashboardWidget.Style.MINI_TALL -> "mini-tall"
             DashboardWidget.Style.COMPACT -> "compact"
+            DashboardWidget.Style.STRIP -> "strip"
             DashboardWidget.Style.TILE -> "tile"
+            DashboardWidget.Style.TILE_TALL -> "tile-tall"
             DashboardWidget.Style.DASHBOARD -> "dashboard"
             else -> "large"
         }
 
     @Test
     fun portraitPhoneGrid() {
-        assertEquals("mini", pick(130, 102))      // 2x1
-        assertEquals("compact", pick(203, 102))   // 3x1
-        assertEquals("compact", pick(276, 102))   // 4x1
-        assertEquals("tile", pick(130, 220))      // 2x2
+        // A portrait row is ~102 dp tall: the tall layouts fill it rather
+        // than leaving the short ones floating in the middle.
+        assertEquals("mini-tall", pick(130, 102)) // 2x1
+        assertEquals("strip", pick(203, 102))     // 3x1
+        assertEquals("strip", pick(276, 102))     // 4x1
+        assertEquals("tile-tall", pick(130, 220)) // 2x2
+        assertEquals("tile", pick(130, 160))      // 2x2 on a dense grid
         assertEquals("large", pick(276, 220))     // 4x2
         assertEquals("large", pick(276, 337))     // 4x3
     }
@@ -37,15 +43,16 @@ class WidgetSizingTest {
     @Test
     fun landscapePhoneGrid() {
         assertEquals("compact", pick(554, 51))    // 4x1: short, so never clipped
-        assertEquals("dashboard", pick(554, 117)) // 4x2
-        assertEquals("dashboard", pick(269, 117)) // 2x2
+        assertEquals("strip", pick(554, 117))     // 4x2
+        assertEquals("strip", pick(269, 117))     // 2x2
         assertEquals("mini", pick(127, 51))       // 2x1
     }
 
     @Test
     fun tallSamsungCells() {
-        // A 4x1 on a 4x5 grid is tall enough for four meters.
-        assertEquals("dashboard", pick(360, 116))
+        // A 4x1 on a 4x5 grid is tall enough for the full strip.
+        assertEquals("strip", pick(360, 116))
+        assertEquals("mini-tall", pick(170, 116))
         assertEquals("large", pick(360, 232))
     }
 
@@ -65,6 +72,11 @@ class WidgetSizingTest {
         assertEquals("Disk", DashboardWidget.shortLabel("disk", "Disk /"))
         assertEquals("Swap", DashboardWidget.shortLabel("swap", "Swap memory"))
         assertEquals("Temp", DashboardWidget.shortLabel("", "Temperature"))
+    }
+
+    @Test
+    fun narrowAndShortGetsTheBarList() {
+        assertEquals("dashboard", pick(190, 116))
     }
 
     @Test

@@ -30,7 +30,12 @@ import com.mazeconnect.core.protocol.SystemStatus
  * the picker offers a sensible first placement for each footprint:
  * Mini 2×1, Square 2×2, Strip 4×1, Grid 4×2, Detailed 4×2. The only difference
  * that survives a resize is the largest layout: Detailed keeps its list with
- * the computer's detail strings and stat cells, the rest use the tile grid.
+ * the computer's detail strings and stat cells, the rest use the ring grid.
+ *
+ * One row of launcher cells is about 102 dp tall in portrait and 51 dp in
+ * landscape, so each single-row footprint has a layout for both: the short
+ * one for landscape, and a tall one that fills a portrait row instead of
+ * floating in the middle of it.
  *
  * The widget is rendered in the launcher's process, whether or not this app
  * is running, so it cannot ask the link for anything. It draws the **last
@@ -60,12 +65,15 @@ open class DashboardWidget : AppWidgetProvider() {
         /** Narrow label column: "RAM" rather than "Memory". */
         val shortLabels: Boolean,
     ) {
-        MINI(R.layout.widget_mini, 110f, 48f, 2, false, false, true),
-        COMPACT(R.layout.widget_compact, 180f, 50f, 3, false, false, true),
-        TILE(R.layout.widget_tile, 110f, 122f, 2, true, false, false),
-        DASHBOARD(R.layout.widget_dashboard, 180f, 116f, 4, false, false, true),
-        GRID(R.layout.widget_grid, 180f, 192f, 4, true, false, false),
-        DETAILED(R.layout.widget_detailed, 180f, 182f, 4, true, true, false),
+        MINI(R.layout.widget_mini, 110f, 50f, 2, false, false, true),
+        MINI_TALL(R.layout.widget_mini_tall, 110f, 97f, 2, false, false, true),
+        COMPACT(R.layout.widget_compact, 200f, 46f, 4, false, false, true),
+        STRIP(R.layout.widget_strip, 200f, 90f, 4, true, false, true),
+        TILE(R.layout.widget_tile, 110f, 137f, 2, true, false, false),
+        TILE_TALL(R.layout.widget_tile_tall, 110f, 216f, 4, true, false, false),
+        DASHBOARD(R.layout.widget_dashboard, 180f, 112f, 4, false, false, true),
+        GRID(R.layout.widget_grid, 240f, 192f, 4, true, false, false),
+        DETAILED(R.layout.widget_detailed, 200f, 213f, 4, true, true, false),
     }
 
     /** What this provider shows when it has room for the most. */
@@ -94,15 +102,15 @@ open class DashboardWidget : AppWidgetProvider() {
     }
 
     class Mini : DashboardWidget() {
-        override val defaultStyle: Style get() = Style.MINI
+        override val defaultStyle: Style get() = Style.MINI_TALL
     }
 
     class Compact : DashboardWidget() {
-        override val defaultStyle: Style get() = Style.COMPACT
+        override val defaultStyle: Style get() = Style.STRIP
     }
 
     class Tile : DashboardWidget() {
-        override val defaultStyle: Style get() = Style.TILE
+        override val defaultStyle: Style get() = Style.TILE_TALL
     }
 
     class Detailed : DashboardWidget() {
@@ -133,7 +141,10 @@ open class DashboardWidget : AppWidgetProvider() {
 
         /** Every layout a provider can show, largest class last. */
         internal fun layoutsFor(large: Style): List<SizedLayout<Style>> =
-            listOf(Style.MINI, Style.COMPACT, Style.TILE, Style.DASHBOARD, large)
+            listOf(
+                Style.MINI, Style.MINI_TALL, Style.COMPACT, Style.STRIP,
+                Style.TILE, Style.TILE_TALL, Style.DASHBOARD, large,
+            )
                 .map { SizedLayout(it, it.widthDp, it.heightDp) }
 
         // One instance per registered provider, used only to read its
@@ -194,8 +205,7 @@ open class DashboardWidget : AppWidgetProvider() {
             views.setOnClickPendingIntent(android.R.id.background, open)
 
             if (stored == null) {
-                views.setTextViewText(R.id.widget_host, context.getString(R.string.widget_no_computer))
-                views.setTextViewText(R.id.widget_age, "")
+                WidgetChrome.header(views, context, null, null)
                 views.setViewVisibility(R.id.widget_meters, View.GONE)
                 if (style.stats) views.setViewVisibility(R.id.widget_stats, View.GONE)
                 views.setViewVisibility(R.id.widget_hint, View.VISIBLE)
@@ -209,11 +219,7 @@ open class DashboardWidget : AppWidgetProvider() {
             val (status, savedAtMillis) = stored
             views.setViewVisibility(R.id.widget_hint, View.GONE)
             views.setViewVisibility(R.id.widget_meters, View.VISIBLE)
-            views.setTextViewText(
-                R.id.widget_host,
-                status.hostname.ifEmpty { context.getString(R.string.widget_computer) },
-            )
-            views.setTextViewText(R.id.widget_age, ageLabel(context, savedAtMillis))
+            WidgetChrome.header(views, context, status.hostname, savedAtMillis)
 
             for (i in 0 until style.slots) {
                 val metric = status.metrics.getOrNull(i)
@@ -284,20 +290,6 @@ open class DashboardWidget : AppWidgetProvider() {
                 "gpu" in probe -> "GPU"
                 "batt" in probe -> "Batt"
                 else -> label.take(5)
-            }
-        }
-
-        /**
-         * How old the reading is, in words. Deliberately coarse: second-level
-         * precision would imply the widget is live, and it is not.
-         */
-        private fun ageLabel(context: Context, savedAtMillis: Long): String {
-            val minutes = (System.currentTimeMillis() - savedAtMillis) / 60_000
-            return when {
-                minutes < 1 -> context.getString(R.string.widget_age_now)
-                minutes < 60 -> context.getString(R.string.widget_age_minutes, minutes)
-                minutes < 60 * 24 -> context.getString(R.string.widget_age_hours, minutes / 60)
-                else -> context.getString(R.string.widget_age_old)
             }
         }
     }

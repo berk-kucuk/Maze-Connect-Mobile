@@ -1,76 +1,125 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Generated from widget_mini.xml with sample readings: the widget picker's preview.
-     Never drawn on a home screen, so the numbers cannot be mistaken for live
-     ones. Regenerate when the source layout changes. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    tools:ignore="HardcodedText"
+<!--
+  GENERATED — the widget picker's preview of widget_mini_tall, with sample readings.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center_vertical"
     android:background="@drawable/widget_background"
-    android:paddingHorizontal="12dp"
-    android:paddingVertical="7dp">
-
-    <TextView
-        android:id="@+id/widget_host"
-        style="@style/WidgetText.Host"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="13sp"
-        android:text="msi" />
-
-    <TextView
-        android:id="@+id/widget_age" android:text="just now"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:visibility="gone" />
-
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="9dp">
     <LinearLayout
-        android:id="@+id/widget_meters"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
         android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:baselineAligned="false">
-
+        <ImageView
+            android:id="@+id/widget_dot"
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:src="@drawable/widget_dot_live"
+            android:contentDescription="@null" />
+        <TextView
+            android:id="@+id/widget_host"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            style="@style/WidgetText.Host.Small"
+            android:layout_weight="1"
+            android:layout_marginStart="7dp"
+            android:text="maze-desktop" />
+        <TextView
+            android:id="@+id/widget_age"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/WidgetText.Age"
+            android:layout_marginStart="8dp"
+            android:text="just now" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:baselineAligned="false"
+        android:id="@+id/widget_meters"
+        android:layout_marginTop="7dp">
         <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
             android:id="@+id/meter_row_1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-            <TextView android:id="@+id/meter_label_1" android:text="CPU" style="@style/WidgetText.Label"
-                android:layout_width="wrap_content" android:layout_height="wrap_content" />
-            <TextView android:id="@+id/meter_value_1" android:text="23%" style="@style/WidgetText.Value"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_marginStart="4dp" />
+            android:gravity="center_horizontal">
+            <FrameLayout
+                android:layout_width="40dp"
+                android:layout_height="40dp">
+                <ProgressBar
+                    android:id="@+id/meter_bar_1"
+                    style="@style/WidgetRing"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:progress="23" />
+                <TextView
+                    android:id="@+id/meter_value_1"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    style="@style/WidgetText.Ring"
+                    android:text="23%" />
+            </FrameLayout>
+            <TextView
+                android:id="@+id/meter_label_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                style="@style/WidgetText.Title"
+                android:layout_marginTop="5dp"
+                android:textSize="10sp"
+                android:text="CPU" />
         </LinearLayout>
-
         <LinearLayout
-            android:id="@+id/meter_row_2"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:id="@+id/meter_row_2"
             android:layout_weight="1"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-            <TextView android:id="@+id/meter_label_2" android:text="RAM" style="@style/WidgetText.Label"
-                android:layout_width="wrap_content" android:layout_height="wrap_content" />
-            <TextView android:id="@+id/meter_value_2" android:text="41%" style="@style/WidgetText.Value"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_marginStart="4dp" />
+            android:gravity="center_horizontal">
+            <FrameLayout
+                android:layout_width="40dp"
+                android:layout_height="40dp">
+                <ProgressBar
+                    android:id="@+id/meter_bar_2"
+                    style="@style/WidgetRing"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:progress="61" />
+                <TextView
+                    android:id="@+id/meter_value_2"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    style="@style/WidgetText.Ring"
+                    android:text="61%" />
+            </FrameLayout>
+            <TextView
+                android:id="@+id/meter_label_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                style="@style/WidgetText.Title"
+                android:layout_marginTop="5dp"
+                android:textSize="10sp"
+                android:text="RAM" />
         </LinearLayout>
     </LinearLayout>
-
     <TextView
         android:id="@+id/widget_hint"
-        style="@style/WidgetText.Hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
-        android:textSize="11sp"
-        android:visibility="gone" />
+        style="@style/WidgetText.Hint"
+        android:layout_marginTop="6dp"
+        android:maxLines="3"
+        android:visibility="gone"
+        android:textSize="11sp" />
 </LinearLayout>

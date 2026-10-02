@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Corner radii. On Android 12 and later the launcher's own (values-v31),
+     so a widget's corners match every other widget on the home screen. -->
+<resources>
+    <dimen name="widget_radius">22dp</dimen>
+    <dimen name="widget_inner_radius">14dp</dimen>
+</resources>
