@@ -38,8 +38,8 @@ android {
         targetSdk = 37
         // Must never go backwards or repeat: Android refuses to install an
         // update whose versionCode is not higher than the installed one.
-        versionCode = 51
-        versionName = "0.16.3"
+        versionCode = 52
+        versionName = "0.16.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The F-Droid build (`-Pmazeconnect.fdroid=true`, set in fdroiddata's

@@ -108,3 +108,9 @@ Requires JDK 17 and the Android SDK (`compileSdk`/`targetSdk` 37,
 ./gradlew test
 ./gradlew lint
 ```
+
+## License
+
+Copyright © 2026 Berk Küçük
+
+Released under the GNU General Public License v3.0 — see [LICENSE](LICENSE).

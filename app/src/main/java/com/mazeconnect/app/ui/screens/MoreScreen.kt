@@ -80,7 +80,7 @@ fun MoreScreen(
 
         Spacer(Modifier.height(28.dp))
         Text(
-            text = "Maze Connect $installedVersion",
+            text = "Maze Connect $installedVersion · for Maze Linux",
             style = MaterialTheme.typography.labelSmall,
             color = colors.dim,
         )
