@@ -40,6 +40,9 @@ class Connection(
     /** True when the peer's key was already pinned before this connection. */
     val peerWasTrusted: Boolean get() = trustManager.peerWasTrusted
 
+    /** Address the peer connected from (for per-source limits). */
+    val remoteAddress: java.net.InetAddress? get() = socket.inetAddress
+
     var onMessage: ((Message) -> Unit)? = null
     var onData: ((Long, ByteArray) -> Unit)? = null
     var onClosed: ((String?) -> Unit)? = null

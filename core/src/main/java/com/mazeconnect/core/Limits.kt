@@ -47,5 +47,13 @@ object Limits {
     const val REPLAY_WINDOW_SIZE = 512
 
     const val MAX_CONNECTIONS_PER_PEER = 4
+    /** TLS handshakes in flight at once on the listener. */
+    const val MAX_PENDING_HANDSHAKES = 8
+    /** Links from not-yet-paired peers held at once, from all addresses. */
+    const val MAX_UNPAIRED_LINKS = 16
+    /** An unpaired link that has not started pairing by then is closed. */
+    const val UNPAIRED_LINK_TTL_MS = 60_000L
+    /** Hard ceiling for an unpaired link, even while a code is on screen. */
+    const val PAIRING_STAGE_MAX_MS = 300_000L
     const val PAIRING_ATTEMPTS_PER_MINUTE = 5
 }

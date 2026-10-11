@@ -27,7 +27,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.InetAddress
@@ -650,52 +652,112 @@ class DeviceManager(
         false
     }
 
+    /**
+     * Accept inbound links. Each TLS handshake runs on its own coroutine: done
+     * inline here, one peer that opened TCP and then said nothing held the
+     * listener for the full 15 s handshake timeout, over and over, and no one
+     * else could connect. At most [Limits.MAX_PENDING_HANDSHAKES] run at once.
+     */
     private suspend fun acceptLoop(server: ServerSocket) {
+        val slots = Semaphore(Limits.MAX_PENDING_HANDSHAKES)
         while (!server.isClosed) {
             val socket = try {
                 server.accept() as SSLSocket
             } catch (_: Exception) {
                 return
             }
-            // Unpaired peers are admitted at the transport layer so pairing
-            // works without arranging a synchronised "pair mode" on both
-            // devices. handleMessage() is what confines them.
-            val (_, trustManager) = tls.createContext(allowUnpaired = true)
-            socket.soTimeout = Connection.HANDSHAKE_TIMEOUT_MS
-            val ok = runCatching { socket.startHandshake(); true }.getOrDefault(false)
-            if (!ok) {
+            if (!slots.tryAcquire()) {
                 runCatching { socket.close() }
                 continue
             }
-            // The handshake above ran through the *listener's* trust manager,
-            // not the one created three lines up: an SSLServerSocket is built
-            // from one SSLContext and every socket it accepts uses that
-            // context. So this manager has seen no certificate and its
-            // peerPublicKey is null — which made adopt() return false on its
-            // very first line, silently, without attaching a handler, without
-            // starting the read loop, and without closing the socket.
-            //
-            // Every inbound connection died exactly there. The phone
-            // completed TLS and then said nothing at all: no hello, no
-            // pairResponse, no disconnect. That is why pressing Pair on the
-            // computer produced no reaction here and no verification code
-            // anywhere, while pairing *initiated from the phone* worked fine
-            // — that path uses tls.connect(), which hands back the manager
-            // that actually performed the handshake.
-            val chain = runCatching {
-                socket.session.peerCertificates
-                    .filterIsInstance<X509Certificate>()
-                    .toTypedArray()
-            }.getOrNull()
-            if (!trustManager.adoptCompletedHandshake(chain)) {
-                Log.w(TAG, "refusing an inbound link: no usable peer key")
-                runCatching { socket.close() }
-                continue
-            }
-            withContext(Dispatchers.Main) {
-                if (!adopt(Connection(socket, trustManager, scope))) {
-                    runCatching { socket.close() }
+            scope.launch(Dispatchers.IO) {
+                try {
+                    handleInbound(socket)
+                } finally {
+                    slots.release()
                 }
+            }
+        }
+    }
+
+    private suspend fun handleInbound(socket: SSLSocket) {
+        // Unpaired peers are admitted at the transport layer so pairing
+        // works without arranging a synchronised "pair mode" on both
+        // devices. handleMessage() is what confines them.
+        val (_, trustManager) = tls.createContext(allowUnpaired = true)
+        socket.soTimeout = Connection.HANDSHAKE_TIMEOUT_MS
+        val ok = runCatching { socket.startHandshake(); true }.getOrDefault(false)
+        if (!ok) {
+            runCatching { socket.close() }
+            return
+        }
+        // The handshake above ran through the *listener's* trust manager,
+        // not the one created three lines up: an SSLServerSocket is built
+        // from one SSLContext and every socket it accepts uses that
+        // context. So this manager has seen no certificate and its
+        // peerPublicKey is null — which made adopt() return false on its
+        // very first line, silently, without attaching a handler, without
+        // starting the read loop, and without closing the socket.
+        //
+        // Every inbound connection died exactly there. The phone
+        // completed TLS and then said nothing at all: no hello, no
+        // pairResponse, no disconnect. That is why pressing Pair on the
+        // computer produced no reaction here and no verification code
+        // anywhere, while pairing *initiated from the phone* worked fine
+        // — that path uses tls.connect(), which hands back the manager
+        // that actually performed the handshake.
+        val chain = runCatching {
+            socket.session.peerCertificates
+                .filterIsInstance<X509Certificate>()
+                .toTypedArray()
+        }.getOrNull()
+        if (!trustManager.adoptCompletedHandshake(chain)) {
+            Log.w(TAG, "refusing an inbound link: no usable peer key")
+            runCatching { socket.close() }
+            return
+        }
+        val connection = Connection(socket, trustManager, scope)
+        withContext(Dispatchers.Main) {
+            // Unpaired peers are admitted so pairing works without a "pair
+            // mode", which also let any LAN host hold an unlimited number of
+            // idle links (each one a blocking reader thread) for as long as it
+            // trickled a byte every 45 s. Bound them per address and in total,
+            // and give each a deadline to start pairing.
+            if (!connection.peerWasTrusted) {
+                val unpaired = links.values.filter { !it.trusted }
+                val fromHere = unpaired.count { it.connection.remoteAddress == connection.remoteAddress }
+                if (fromHere >= Limits.MAX_CONNECTIONS_PER_PEER || unpaired.size >= Limits.MAX_UNPAIRED_LINKS) {
+                    Log.w(TAG, "refusing an unpaired link: too many from this address or in total")
+                    runCatching { socket.close() }
+                    return@withContext
+                }
+            }
+            if (!adopt(connection)) {
+                runCatching { socket.close() }
+                return@withContext
+            }
+            if (!connection.peerWasTrusted) {
+                links.values.firstOrNull { it.connection === connection }?.let { watchUnpaired(it) }
+            }
+        }
+    }
+
+    /** Close an unpaired link that never gets to (or never finishes) pairing. */
+    private fun watchUnpaired(link: Link) {
+        scope.launch {
+            val started = System.currentTimeMillis()
+            delay(Limits.UNPAIRED_LINK_TTL_MS)
+            while (true) {
+                if (link.trusted || links[link.deviceId] !== link) return@launch
+                val pairing = _pendingPairing.value?.deviceId == link.deviceId
+                val elapsed = System.currentTimeMillis() - started
+                if (!pairing || elapsed >= Limits.PAIRING_STAGE_MAX_MS) {
+                    link.connection.close(
+                        if (pairing) "pairing took too long" else "no pairing started")
+                    return@launch
+                }
+                // A code is on screen: give the user time to compare it.
+                delay(5_000)
             }
         }
     }
@@ -1260,6 +1322,15 @@ class DeviceManager(
             link.connection.close("pair reveal repeated")
             return
         }
+        // One pairing at a time, on this side too. Replacing a pending pairing
+        // that belongs to another device swapped the name and code under a
+        // dialog the user was about to accept, and respondToPairing() applies
+        // the answer to whatever is pending at the time of the tap. The slot is
+        // freed when its link closes or the user answers.
+        if (_pendingPairing.value != null) {
+            link.connection.close("another pairing is in progress")
+            return
+        }
 
         val theirNonce = message.binary("nonce", Sas.NONCE_SIZE)
         val ourKey = keyStore.publicKey()
@@ -1302,6 +1373,15 @@ class DeviceManager(
         }
         if (link.trusted || !pending.weInitiated || pending.deviceId != link.deviceId) {
             link.connection.close("unexpected pair response")
+            return
+        }
+        // One response per handshake. Our nonce is revealed right after the
+        // first one, so accepting a second would let the responder pick its
+        // nonce against a known value and grind the 6-digit code to match the
+        // other screen — the attack the commitment exists to prevent.
+        if (link.theirNonce != null) {
+            _pendingPairing.value = null
+            link.connection.close("pair response repeated")
             return
         }
 
