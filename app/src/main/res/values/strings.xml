@@ -12,6 +12,14 @@
     <string name="pairing_channel_description">Shown when a computer asks to pair with this phone.</string>
     <string name="pairing_notification_title">Pairing request</string>
     <string name="pairing_notification_text">%1$s wants to pair. Tap to compare the code.</string>
+    <string name="approval_channel_name">Approval requests</string>
+    <string name="approval_channel_description">Shown when a computer asks you to approve sudo or an administrator prompt.</string>
+    <string name="approval_notification_title">%1$s asks for administrator access</string>
+    <string name="approval_notification_text">Tap to approve with your fingerprint — you will need the code on its screen.</string>
+    <string name="locked_notification_title">Locked by %1$s</string>
+    <string name="locked_notification_text">A computer you paired locked this phone.</string>
+    <string name="lock_admin_label">Maze Connect: lock this phone</string>
+    <string name="lock_admin_description">Lets a computer you paired lock this phone\'s screen. It cannot wipe, change the PIN or read anything.</string>
     <string name="live_action_refresh">Refresh</string>
     <string name="live_channel_name">Live status</string>
     <string name="live_channel_description">CPU and memory of the connected computer, kept current at a glance.</string>

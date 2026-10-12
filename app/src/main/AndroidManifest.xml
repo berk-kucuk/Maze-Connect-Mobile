@@ -50,6 +50,13 @@
       prerequisite is satisfied by CHANGE_WIFI_MULTICAST_STATE above.
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Approvals: the fingerprint prompt that unlocks the approval key.
+         Normal permission, granted at install. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- The approval screen hides other apps' overlays while it is up, so
+         nothing drawn on top of it can steer the Approve tap. Normal
+         permission, granted at install. -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
 
     <application
         android:allowBackup="false"
@@ -163,6 +170,34 @@
 
         <!-- The confirmation (and result) a Commands-widget tap goes
              through. Not exported: only this app's own widget starts it. -->
+        <!-- Approving an unlock or a sudo/polkit prompt. Not exported: it is
+             opened from this app's own notification and screens only. -->
+        <activity
+            android:name=".security.ApprovalActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MazeConnect" />
+
+        <!-- Lets a paired computer lock this phone, once the owner has turned
+             it on in Settings and agreed in the system's own dialog. Its one
+             policy is force-lock (res/xml/lock_admin.xml). Exported because
+             the system binds it; BIND_DEVICE_ADMIN means only the system can. -->
+        <receiver
+            android:name=".service.LockAdminReceiver"
+            android:exported="true"
+            android:label="@string/lock_admin_label"
+            android:description="@string/lock_admin_description"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/lock_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".widget.CommandRunActivity"
             android:exported="false"

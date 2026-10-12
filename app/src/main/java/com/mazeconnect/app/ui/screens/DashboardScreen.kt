@@ -57,6 +57,8 @@ fun DashboardScreen(
     onManualRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenDevices: () -> Unit = {},
+    canUnlock: (String) -> Boolean = { false },
+    onUnlock: (String) -> Unit = {},
 ) {
     val colors = LocalMazeColors.current
 
@@ -91,6 +93,14 @@ fun DashboardScreen(
             // a stale panel is by definition one the poll is not touching.
             // This asks again, and asks for the link back when there is none.
             MazeButton(text = "Refresh", onClick = onManualRefresh, primary = false)
+            // Only where the computer has allowed this phone and this phone
+            // has an approval key: a button that can only fail is not offered.
+            val unlockable = devices.firstOrNull { it.deviceId == selectedDeviceId }
+                ?.takeIf { it.connected && canUnlock(it.deviceId) }
+            if (unlockable != null) {
+                Spacer(Modifier.width(8.dp))
+                MazeButton(text = "Unlock", onClick = { onUnlock(unlockable.deviceId) })
+            }
         }
 
         // Filtered to the computer actually on screen. The flow holds one

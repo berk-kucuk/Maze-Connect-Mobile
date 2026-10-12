@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The only device-admin policy Maze Connect asks for: lock the screen.
+     No wipe, no password policy, no camera control — see PhoneLock.kt. -->
+<device-admin>
+    <uses-policies>
+        <force-lock />
+    </uses-policies>
+</device-admin>

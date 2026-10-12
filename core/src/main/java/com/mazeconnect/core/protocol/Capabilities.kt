@@ -54,7 +54,16 @@ enum class Capability(val wire: String) {
     CLIPBOARD_SYNC("clipboardSync"),
 
     /** Browse and download from the one folder the computer shares. */
-    SHARED_FOLDER("sharedFolder");
+    SHARED_FOLDER("sharedFolder"),
+
+    /** Unlock the computer, and approve its sudo/polkit prompts, with this
+     *  phone's fingerprint. The computer's owner has to allow it for this
+     *  phone, after seeing the key's code. */
+    APPROVAL("approval"),
+
+    /** Let the computer lock this phone's screen — only once this phone's
+     *  owner has switched it on (it needs device-admin "lock" permission). */
+    LOCK_PHONE("lockPhone");
 
     companion object {
         /** Unknown names degrade to null rather than being guessed at. */
@@ -73,7 +82,7 @@ enum class Capability(val wire: String) {
             setOf(
                 FILE_TRANSFER, SYSTEM_STATUS, COMMANDS, AI, GUARD_CONTROL, OPEN_ON_PHONE, MEDIA,
                 PHONE_STATUS, FIND_PHONE, SHARE_TEXT, REMOTE_INPUT, PRESENTER, CLIPBOARD_SYNC,
-                SHARED_FOLDER,
+                SHARED_FOLDER, APPROVAL, LOCK_PHONE,
             )
 
         /**

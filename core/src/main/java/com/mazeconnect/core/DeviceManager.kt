@@ -2,6 +2,9 @@ package com.mazeconnect.core
 
 import android.content.Context
 import android.util.Log
+import com.mazeconnect.core.approval.ApprovalChallenge
+import com.mazeconnect.core.approval.ApprovalPurpose
+import com.mazeconnect.core.approval.ApprovalSigning
 import com.mazeconnect.core.crypto.Fingerprint
 import com.mazeconnect.core.crypto.Sas
 import com.mazeconnect.core.discovery.Beacon
@@ -238,6 +241,48 @@ data class IncomingTransfer(
     val outgoing: Boolean = false,
 )
 
+/**
+ * A paired computer asking this phone's owner to approve something: unlock
+ * its screen (which this phone asked for) or an administrator prompt. Only one
+ * is open at a time. [computerName] comes from this phone's own pairing
+ * record, never from the request.
+ */
+class ApprovalPrompt(
+    val deviceId: String,
+    val computerName: String,
+    val requestId: Long,
+    val purpose: ApprovalPurpose,
+    val host: String,
+    val user: String,
+    val detail: String,
+    val nonce: ByteArray,
+    val issuedAt: Long,
+    val codeRequired: Boolean,
+    /** SHA-256 of the computer's identity key as this phone pinned it. */
+    val verifierFingerprint: ByteArray,
+    val status: Status = Status.OPEN,
+    /** Why it ended, or what the computer said; for display. */
+    val message: String? = null,
+) {
+    enum class Status { OPEN, WAITING, APPROVED, REFUSED, CANCELLED }
+
+    val isLive: Boolean get() = status == Status.OPEN || status == Status.WAITING
+
+    fun with(status: Status, message: String? = this.message) = ApprovalPrompt(
+        deviceId, computerName, requestId, purpose, host, user, detail, nonce, issuedAt,
+        codeRequired, verifierFingerprint, status, message,
+    )
+
+    /** The bytes to sign once the owner has typed [code] ("" for an unlock). */
+    fun signingInput(code: String): ByteArray = ApprovalSigning.signingInput(
+        ApprovalChallenge(purpose, host, user, detail, nonce, issuedAt, code),
+        verifierFingerprint,
+    )
+}
+
+/** Where an unlock this phone asked a computer for stands. */
+data class UnlockState(val asking: Boolean, val ok: Boolean? = null, val message: String? = null)
+
 /** Something the UI should tell the user about. */
 sealed interface DeviceEvent {
     data class PairingFailed(val deviceId: String, val reason: String) : DeviceEvent
@@ -280,6 +325,16 @@ sealed interface DeviceEvent {
     /** A computer's clipboard changed and sync is on here: the service puts
      *  [text] on this phone's clipboard. */
     data class ClipboardReceived(val deviceId: String, val text: String) : DeviceEvent
+
+    /** An approval needs the owner. The service raises it if the app is not
+     *  on screen; the approval screen itself reads [DeviceManager.approval]. */
+    data class ApprovalRequested(val prompt: ApprovalPrompt) : DeviceEvent
+
+    /** That approval is over, for whatever reason: retire its notification. */
+    data class ApprovalClosed(val deviceId: String, val requestId: Long) : DeviceEvent
+
+    /** A computer locked this phone. Said afterwards, so the owner knows who. */
+    data class PhoneLocked(val deviceId: String, val deviceName: String) : DeviceEvent
 }
 
 /**
@@ -486,6 +541,37 @@ class DeviceManager(
     val previews: StateFlow<Map<String, Preview>> = _previews.asStateFlow()
     private val previewRequests =
         java.util.concurrent.ConcurrentHashMap<Long, Triple<String, String, Boolean>>()
+
+    // ---- Approval -----------------------------------------------------------
+
+    private val _approval = MutableStateFlow<ApprovalPrompt?>(null)
+    /** The one approval in front of the owner, or the last one's outcome. */
+    val approval: StateFlow<ApprovalPrompt?> = _approval.asStateFlow()
+    private val approvalLock = Any()
+
+    private val _unlock = MutableStateFlow<Map<String, UnlockState>>(emptyMap())
+    val unlock: StateFlow<Map<String, UnlockState>> = _unlock.asStateFlow()
+
+    /** When this phone asked each computer to unlock. An unlock challenge is
+     *  only taken from a computer this phone asked, and only shortly after. */
+    private val unlockAsked = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val approvalWindows = java.util.concurrent.ConcurrentHashMap<String, LongArray>()
+    private val lockWindows = java.util.concurrent.ConcurrentHashMap<String, LongArray>()
+
+    /**
+     * This phone's approval key (SPKI DER), or null when approvals are not set
+     * up. The private half never leaves the Keystore and can only sign after
+     * the owner's fingerprint; the app module owns it — see ApprovalKeys.
+     */
+    @Volatile var approvalPublicKey: ByteArray? = null
+        private set
+
+    /**
+     * Lock this phone's screen on a computer's request. Set by the service;
+     * returns null once locked, or why it could not. Null when locking is not
+     * available at all.
+     */
+    @Volatile var phoneLocker: ((computerName: String) -> String?)? = null
 
     /** Computers that asked this phone to ring and are owed a "stopped". */
     private val ringRequesters = java.util.Collections.newSetFromMap(
@@ -904,6 +990,7 @@ class DeviceManager(
         publishDevices()
         markConnected(device.deviceId, true)
         emit(DeviceEvent.PairingCompleted(device.deviceId, true))
+        if (link.helloReceived) sendApprovalKey(link)
     }
 
     // ---- Link lifecycle --------------------------------------------------
@@ -1126,6 +1213,14 @@ class DeviceManager(
 
             MessageType.FOLDER_PREVIEW_RESULT -> handleFolderPreviewResult(link, message)
 
+            MessageType.APPROVAL_REQUEST -> handleApprovalRequest(link, message)
+
+            MessageType.APPROVAL_RESULT -> handleApprovalResult(link, message)
+
+            MessageType.APPROVAL_CANCEL -> handleApprovalCancel(link, message)
+
+            MessageType.LOCK_PHONE -> handleLockPhone(link)
+
             MessageType.FILE_CANCEL, MessageType.FILE_REJECT -> {
                 val id = message.integer("transferId", 0xFFFFFFFFL) ?: return
                 // Could be either direction: a file we were receiving, or one
@@ -1257,6 +1352,10 @@ class DeviceManager(
         link.deviceName = name
         link.peerCapabilities =
             Capability.fromNames(message.stringList("capabilities", 32, 32))
+
+        // Where approvals stand on this phone, every time: a key set up or
+        // removed while the computer was away reaches it now.
+        if (link.trusted) sendApprovalKey(link)
 
         // Now that the computer has said what it offers, pick the media
         // subscription back up if something here still wants it — the link
@@ -2045,6 +2144,12 @@ class DeviceManager(
      */
     private fun forgetPendingWork(deviceId: String) {
         statusAwaiting.remove(deviceId)
+        // A challenge from a computer that is gone cannot be answered to it.
+        unlockAsked.remove(deviceId)
+        _unlock.value[deviceId]?.takeIf { it.asking }?.let {
+            _unlock.put(deviceId, UnlockState(false, false, "the computer disconnected"))
+        }
+        closeApproval(deviceId, null, ApprovalPrompt.Status.CANCELLED, "the computer disconnected")
         // A ring outlives the link on purpose — a lost phone keeps ringing
         // while its Wi-Fi drops in and out — but there is nobody left to
         // tell when it stops.
@@ -2202,6 +2307,274 @@ class DeviceManager(
             link.connection.send(Message.shareText(link.connection.nextCounter(), text))
         }
         return true
+    }
+
+    // ---- Approval ---------------------------------------------------------
+
+    /**
+     * Set up (or, with null, remove) this phone's approval key, and tell every
+     * computer that may use approvals. Removing it also closes whatever is in
+     * front of the owner: there is nothing left to sign with.
+     */
+    fun setApprovalKey(key: ByteArray?) {
+        approvalPublicKey = key
+        if (key == null) {
+            _approval.value?.takeIf { it.isLive }?.let {
+                closeApproval(it.deviceId, it.requestId, ApprovalPrompt.Status.CANCELLED,
+                    "approvals were switched off on this phone")
+            }
+        }
+        for (link in links.values) {
+            if (link.trusted && link.helloReceived) sendApprovalKey(link)
+        }
+    }
+
+    private fun sendApprovalKey(link: Link) {
+        if (!allowed(link, Capability.APPROVAL)) return
+        val key = approvalPublicKey
+        scope.launch {
+            link.connection.send(Message.approvalKey(link.connection.nextCounter(), key))
+        }
+    }
+
+    /**
+     * Ask [targetDeviceId] to unlock its screen. It answers with a challenge,
+     * which arrives as [approval] for the owner's fingerprint, or with why not.
+     */
+    fun requestUnlock(targetDeviceId: String): Boolean {
+        val link = links[targetDeviceId] ?: return false
+        if (!allowed(link, Capability.APPROVAL) || approvalPublicKey == null) return false
+        // A finished prompt from before is not this request's answer.
+        dismissApproval()
+        unlockAsked[targetDeviceId] = android.os.SystemClock.elapsedRealtime()
+        _unlock.put(targetDeviceId, UnlockState(asking = true))
+        scope.launch { link.connection.send(Message.unlockRequest(link.connection.nextCounter())) }
+        return true
+    }
+
+    private fun handleApprovalRequest(link: Link, message: Message) {
+        val requestId = message.integer("requestId", 0xFFFFFFFFL)?.takeIf { it > 0 } ?: return
+        fun refuse(reason: String) {
+            Log.i(TAG, "refusing approval request: $reason")
+            scope.launch {
+                link.connection.send(
+                    Message.approvalResponse(link.connection.nextCounter(), requestId, null, reason)
+                )
+            }
+        }
+        if (!allowed(link, Capability.APPROVAL)) {
+            return refuse("this phone does not take approvals from your computer")
+        }
+        if (approvalPublicKey == null) return refuse("approvals are not set up on this phone")
+        val purpose = ApprovalPurpose.from(message.string("purpose", 16))
+            ?: return refuse("unknown purpose")
+        fun field(key: String, max: Int, allowEmpty: Boolean) =
+            message.string(key, max)?.takeIf {
+                ApprovalSigning.isDisplaySafe(it) && (allowEmpty || it.isNotBlank())
+            }
+        val host = field("host", Limits.MAX_APPROVAL_HOST_CHARS, false)
+        val user = field("user", Limits.MAX_APPROVAL_USER_CHARS, false)
+        val detail = field("detail", Limits.MAX_APPROVAL_DETAIL_CHARS, true)
+        val nonce = message.binary("nonce", Limits.APPROVAL_NONCE_SIZE)
+        val issuedAt = message.integer("issuedAt", 1L shl 40)
+        val codeRequired = message.boolean("codeRequired")
+        if (host == null || user == null || detail == null || nonce == null || issuedAt == null) {
+            return refuse("malformed request")
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (purpose == ApprovalPurpose.UNLOCK) {
+            // Only an unlock this phone asked for, from that computer, just
+            // now. A computer cannot put an unlock prompt in front of the
+            // owner on its own initiative — that is how a tap gets fished.
+            val asked = unlockAsked.remove(link.deviceId)
+            if (asked == null || now - asked > Limits.UNLOCK_ASK_WINDOW_MS || codeRequired) {
+                return refuse("this phone did not ask to unlock")
+            }
+        } else {
+            // Administrator access always carries the terminal's code. One
+            // without would be a fingerprint for something the owner cannot
+            // tie to what is on their screen.
+            if (!codeRequired) return refuse("administrator approval needs a code")
+            if (!allowWindow(approvalWindows, link.deviceId,
+                    Limits.MAX_APPROVAL_REQUESTS_PER_MINUTE, 60_000L)) {
+                return refuse("too many requests")
+            }
+        }
+        val pinned = link.connection.peerPublicKey ?: return refuse("not a paired computer")
+        val computerName = store.forKey(pinned)?.deviceName ?: link.deviceName
+        val prompt = ApprovalPrompt(
+            deviceId = link.deviceId,
+            computerName = computerName,
+            requestId = requestId,
+            purpose = purpose,
+            host = host,
+            user = user,
+            detail = detail,
+            nonce = nonce,
+            issuedAt = issuedAt,
+            codeRequired = codeRequired,
+            verifierFingerprint = ApprovalSigning.fingerprintOf(pinned),
+        )
+        synchronized(approvalLock) {
+            val current = _approval.value
+            // One at a time. A second computer waits; the same computer's
+            // newer request replaces its older one.
+            if (current != null && current.isLive && current.deviceId != link.deviceId) {
+                return refuse("another approval is open on the phone")
+            }
+            _approval.value = prompt
+        }
+        emit(DeviceEvent.ApprovalRequested(prompt))
+        scope.launch {
+            delay(Limits.APPROVAL_TIMEOUT_MS)
+            val current = _approval.value
+            if (current != null && current.requestId == requestId &&
+                current.deviceId == link.deviceId && current.status == ApprovalPrompt.Status.OPEN
+            ) {
+                closeApproval(link.deviceId, requestId, ApprovalPrompt.Status.CANCELLED,
+                    "no answer in time")
+            }
+        }
+    }
+
+    /**
+     * Answer the prompt on screen: [signature] over [ApprovalPrompt.signingInput],
+     * or null with why not. Only the prompt that is actually open, still from
+     * a computer that is still linked, is answered.
+     */
+    fun answerApproval(prompt: ApprovalPrompt, signature: ByteArray?, error: String? = null): Boolean {
+        val link: Link
+        synchronized(approvalLock) {
+            val current = _approval.value
+            if (current == null || current.deviceId != prompt.deviceId ||
+                current.requestId != prompt.requestId ||
+                current.status != ApprovalPrompt.Status.OPEN
+            ) {
+                return false
+            }
+            link = links[prompt.deviceId]?.takeIf { it.trusted } ?: run {
+                _approval.value = current.with(ApprovalPrompt.Status.CANCELLED,
+                    "the computer disconnected")
+                return false
+            }
+            _approval.value = if (signature != null) {
+                current.with(ApprovalPrompt.Status.WAITING, null)
+            } else {
+                current.with(ApprovalPrompt.Status.REFUSED, error ?: "declined")
+            }
+        }
+        if (signature == null) emit(DeviceEvent.ApprovalClosed(prompt.deviceId, prompt.requestId))
+        if (prompt.purpose == ApprovalPurpose.UNLOCK && signature == null) {
+            _unlock.put(prompt.deviceId, UnlockState(false, false, error ?: "declined"))
+        }
+        scope.launch {
+            link.connection.send(
+                Message.approvalResponse(link.connection.nextCounter(), prompt.requestId,
+                    signature, if (signature == null) error ?: "declined on the phone" else null)
+            )
+        }
+        return true
+    }
+
+    /** Forget a finished prompt once its outcome has been shown. */
+    fun dismissApproval() {
+        synchronized(approvalLock) {
+            if (_approval.value?.isLive == false) _approval.value = null
+        }
+    }
+
+    private fun handleApprovalResult(link: Link, message: Message) {
+        val requestId = message.integer("requestId", 0xFFFFFFFFL) ?: return
+        val ok = message.boolean("ok")
+        val error = message.string("error", 200)
+        if (requestId == 0L) {
+            // An unlock refused before any challenge — not allowed, not
+            // locked. Only taken while this phone is waiting on one.
+            if (unlockAsked.remove(link.deviceId) != null ||
+                _unlock.value[link.deviceId]?.asking == true
+            ) {
+                _unlock.put(link.deviceId, UnlockState(false, false, error ?: "refused"))
+            }
+            return
+        }
+        val current = _approval.value ?: return
+        if (current.deviceId != link.deviceId || current.requestId != requestId ||
+            current.status != ApprovalPrompt.Status.WAITING
+        ) {
+            return
+        }
+        closeApproval(link.deviceId, requestId,
+            if (ok) ApprovalPrompt.Status.APPROVED else ApprovalPrompt.Status.REFUSED, error)
+        if (current.purpose == ApprovalPurpose.UNLOCK) {
+            _unlock.put(link.deviceId, UnlockState(false, ok, error))
+        }
+    }
+
+    private fun handleApprovalCancel(link: Link, message: Message) {
+        val requestId = message.integer("requestId", 0xFFFFFFFFL) ?: return
+        closeApproval(link.deviceId, requestId, ApprovalPrompt.Status.CANCELLED,
+            message.string("reason", 200) ?: "cancelled on the computer")
+    }
+
+    /** End the live prompt from [deviceId] (and [requestId], if given). */
+    private fun closeApproval(
+        deviceId: String,
+        requestId: Long?,
+        status: ApprovalPrompt.Status,
+        message: String?,
+    ) {
+        val closed = synchronized(approvalLock) {
+            val current = _approval.value
+            if (current == null || !current.isLive || current.deviceId != deviceId ||
+                (requestId != null && current.requestId != requestId)
+            ) {
+                null
+            } else {
+                current.with(status, message).also { _approval.value = it }
+            }
+        } ?: return
+        if (closed.purpose == ApprovalPurpose.UNLOCK && status != ApprovalPrompt.Status.APPROVED) {
+            _unlock.put(deviceId, UnlockState(false, false, message))
+        }
+        emit(DeviceEvent.ApprovalClosed(deviceId, closed.requestId))
+    }
+
+    private fun handleLockPhone(link: Link) {
+        val locker = phoneLocker
+        val pinned = link.connection.peerPublicKey
+        val name = pinned?.let { store.forKey(it)?.deviceName } ?: link.deviceName
+        val refusal = when {
+            !allowed(link, Capability.LOCK_PHONE) -> "this phone does not let your computer lock it"
+            !allowWindow(lockWindows, link.deviceId, Limits.MAX_PHONE_LOCKS_PER_MINUTE, 60_000L) ->
+                "too many lock requests"
+            locker == null -> "locking is not available on this phone"
+            else -> runCatching { locker(name) }.getOrElse { "the phone could not lock" }
+        }
+        if (refusal == null) emit(DeviceEvent.PhoneLocked(link.deviceId, name))
+        scope.launch {
+            link.connection.send(
+                Message.lockPhoneResult(link.connection.nextCounter(), refusal == null, refusal)
+            )
+        }
+    }
+
+    /** At most [max] in any [windowMs] per device. */
+    private fun allowWindow(
+        table: java.util.concurrent.ConcurrentHashMap<String, LongArray>,
+        deviceId: String,
+        max: Int,
+        windowMs: Long,
+    ): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val window = table.getOrPut(deviceId) { longArrayOf(now, 0) }
+        synchronized(window) {
+            if (now - window[0] >= windowMs) {
+                window[0] = now
+                window[1] = 0
+            }
+            window[1] += 1
+            return window[1] <= max
+        }
     }
 
     // ---- Remote input ----------------------------------------------------

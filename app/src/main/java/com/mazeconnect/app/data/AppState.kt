@@ -125,7 +125,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         MazeConnectService.start(getApplication())
 
         viewModelScope.launch {
-            manager.events.collect { event -> _status.value = event.describe() }
+            manager.events.collect { event ->
+                event.describe().takeIf { it.isNotEmpty() }?.let { _status.value = it }
+            }
         }
         followSnapshotsForWidget()
         checkForUpdateIfDue()
@@ -411,6 +413,50 @@ class AppState(application: Application) : AndroidViewModel(application) {
         get() = com.mazeconnect.app.service.PhonePrefs.allowRing(getApplication())
         set(value) = com.mazeconnect.app.service.PhonePrefs.setAllowRing(getApplication(), value, manager)
 
+    // ---- Approvals ----------------------------------------------------------
+
+    private val _approvalKeyCode = MutableStateFlow(
+        com.mazeconnect.app.security.ApprovalKeys.publicKey()
+            ?.let(com.mazeconnect.core.approval.ApprovalSigning::keyCode)
+    )
+    /** The code a computer shows for this phone's approval key, or null when
+     *  approvals are not set up. Compared by eye before a computer trusts it. */
+    val approvalKeyCode: StateFlow<String?> = _approvalKeyCode.asStateFlow()
+
+    /** Make the key and offer it to every paired computer. */
+    fun setUpApprovals() {
+        val app = getApplication<Application>()
+        com.mazeconnect.app.security.ApprovalKeys.unavailableReason(app)?.let {
+            _status.value = "Approvals: $it."
+            return
+        }
+        val key = runCatching { com.mazeconnect.app.security.ApprovalKeys.create() }
+            .getOrElse {
+                _status.value = "Approvals: could not create a key on this phone."
+                return
+            }
+        manager.setApprovalKey(key)
+        _approvalKeyCode.value = com.mazeconnect.core.approval.ApprovalSigning.keyCode(key)
+        _status.value = "Approvals set up. Allow this phone in the computer's Settings."
+    }
+
+    /** Remove the key; every computer is told, and stops accepting it. */
+    fun removeApprovals() {
+        com.mazeconnect.app.security.ApprovalKeys.delete()
+        manager.setApprovalKey(null)
+        _approvalKeyCode.value = null
+        _status.value = "Approvals removed."
+    }
+
+    /** Whether the selected computer would take an unlock request. */
+    fun canUnlock(deviceId: String?): Boolean =
+        deviceId != null && manager.approvalPublicKey != null &&
+            manager.allows(deviceId, com.mazeconnect.core.protocol.Capability.APPROVAL)
+
+    var allowLockEnabled: Boolean
+        get() = com.mazeconnect.app.service.PhonePrefs.allowLock(getApplication())
+        set(value) = com.mazeconnect.app.service.PhonePrefs.setAllowLock(getApplication(), value)
+
     /** Ring once from Settings, so the owner knows what a computer's ring
      *  sounds like — and that it is loud enough — before the day they need it. */
     fun testRing() {
@@ -624,6 +670,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         is DeviceEvent.ClipboardReceived -> "Clipboard from your computer."
         is DeviceEvent.FindPhone ->
             if (ring) "$deviceName is ringing this phone." else "Ringing stopped."
+        is DeviceEvent.ApprovalRequested -> "${prompt.computerName} is asking for approval."
+        is DeviceEvent.ApprovalClosed -> ""
+        is DeviceEvent.PhoneLocked -> "Locked by $deviceName."
     }
 
     private fun PairedDevice.toRow(connected: Boolean) = DeviceRow(

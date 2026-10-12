@@ -17,6 +17,7 @@ object PhonePrefs {
     private const val KEY_SHARE_STATUS = "share_status"
     private const val KEY_ALLOW_RING = "allow_ring"
     private const val KEY_CLIPBOARD_SYNC = "clipboard_sync"
+    private const val KEY_ALLOW_LOCK = "allow_lock"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -45,10 +46,27 @@ object PhonePrefs {
         manager?.clipboardSyncEnabled = value
     }
 
+    /**
+     * Whether a paired computer may lock this phone. Off until the owner
+     * turns it on — and turning it on also needs the system's device-admin
+     * consent, which [PhoneLock] asks for.
+     */
+    fun allowLock(context: Context): Boolean = prefs(context).getBoolean(KEY_ALLOW_LOCK, false)
+
+    fun setAllowLock(context: Context, value: Boolean) {
+        prefs(context).edit { putBoolean(KEY_ALLOW_LOCK, value) }
+        // Off means off: the admin grant goes too, so nothing is left behind
+        // that would stand in the way of uninstalling the app.
+        if (!value) PhoneLock.deactivate(context)
+    }
+
     /** Copy the stored switches onto a freshly created manager. */
     fun apply(context: Context, manager: DeviceManager) {
         manager.phoneStatusSharing = shareStatus(context)
         manager.findPhoneAllowed = allowRing(context)
         manager.clipboardSyncEnabled = clipboardSync(context)
+        val app = context.applicationContext
+        manager.phoneLocker = { _ -> PhoneLock.lock(app) }
+        manager.setApprovalKey(com.mazeconnect.app.security.ApprovalKeys.publicKey())
     }
 }

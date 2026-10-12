@@ -139,6 +139,34 @@ clipboardSync, sharedFolder. On this side:
   `..`, no controls). `expectedFetches` holds the ids a computer promised for
   our fetches; only those offers skip the prompt.
 
+## Approval and locking (`approval`, `lockPhone`)
+
+The contract is `Maze-Connect/docs/PROTOCOL.md` § approval and § lockPhone;
+what this side adds:
+
+- `approvalKey` is sent after every `hello` from a paired computer that
+  allows `approval`, and again when the owner sets approvals up or removes
+  them in Settings › Approvals. The key is `ApprovalKeys` (Keystore,
+  StrongBox where available, per-use biometric/PIN, invalidated on
+  fingerprint enrolment, unlocked-device-required) and is separate from the
+  identity key.
+- An `approvalRequest` is taken only from a trusted link with `approval`
+  allowed, with a key set up, with every display field bounded and free of
+  control, bidi and line-separator characters (`ApprovalSigning.isDisplaySafe`),
+  a 32-byte nonce and a closed purpose. `unlock` only within 30 s of this
+  phone's own `unlockRequest` to that computer, and never with
+  `codeRequired`; `sudo`/`polkit` only *with* `codeRequired`, at most six a
+  minute per computer. One prompt at a time; another computer's is refused
+  as busy, the same computer's newer one replaces it; unanswered ones close
+  after 45 s.
+- The signature is over `ApprovalSigning.signingInput` with the code the
+  owner typed and the SHA-256 of **this phone's pin** for that computer —
+  never a value from the request. It is made inside BiometricPrompt's
+  `CryptoObject` in `ApprovalActivity`, which hides overlay windows and
+  ignores obscured touches.
+- `lockPhone` calls `PhoneLock.lock()`: owner switch on *and* the
+  device-admin `force-lock` policy granted, else a refusal that says which.
+
 ## Scope
 
 v2 dropped notification mirroring, clipboard sync and ping/find-my-device:

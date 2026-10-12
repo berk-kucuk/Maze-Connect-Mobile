@@ -98,7 +98,31 @@ enum class MessageType(val wire: String) {
     FOLDER_PREVIEW("folderPreview"),
 
     /** Computer -> phone: that picture (JPEG, base64), or why not. */
-    FOLDER_PREVIEW_RESULT("folderPreviewResult");
+    FOLDER_PREVIEW_RESULT("folderPreviewResult"),
+
+    /** Phone -> computer: this phone's approval key, or its withdrawal. */
+    APPROVAL_KEY("approvalKey"),
+
+    /** Phone -> computer: "I want to unlock you" — answered with a challenge. */
+    UNLOCK_REQUEST("unlockRequest"),
+
+    /** Computer -> phone: a challenge to sign after the owner's fingerprint. */
+    APPROVAL_REQUEST("approvalRequest"),
+
+    /** Phone -> computer: the signature, or that the owner declined. */
+    APPROVAL_RESPONSE("approvalResponse"),
+
+    /** Computer -> phone: whether the signature did what it was for. */
+    APPROVAL_RESULT("approvalResult"),
+
+    /** Computer -> phone: that challenge is no longer open. */
+    APPROVAL_CANCEL("approvalCancel"),
+
+    /** Computer -> phone: lock your screen now. */
+    LOCK_PHONE("lockPhone"),
+
+    /** Phone -> computer: whether it locked, or why not. */
+    LOCK_PHONE_RESULT("lockPhoneResult");
 
     companion object {
         fun from(wire: String?): MessageType? = entries.firstOrNull { it.wire == wire }
@@ -184,6 +208,22 @@ class Message private constructor(
             return null
         }
         return if (decoded.size == expectedSize) decoded else null
+    }
+
+    /**
+     * Base64 field decoded to between [minSize] and [maxSize] bytes, or null —
+     * for values with no fixed length, a DER signature or an SPKI key. The
+     * encoded text is bounded before it is decoded.
+     */
+    fun binary(key: String, minSize: Int, maxSize: Int): ByteArray? {
+        val encoded = body.opt(key) as? String ?: return null
+        if (encoded.length > ((maxSize + 2) / 3) * 4) return null
+        val decoded = try {
+            Base64.getDecoder().decode(encoded)
+        } catch (_: IllegalArgumentException) {
+            return null
+        }
+        return if (decoded.size in minSize..maxSize) decoded else null
     }
 
     /** String array, each element bounded; capped in length. */
@@ -594,6 +634,71 @@ class Message private constructor(
 
         fun clipboardSync(counter: Long, text: String) =
             build(MessageType.CLIPBOARD_SYNC, counter) { put("text", text) }
+
+        /** This phone's approval key (SPKI DER), or null to withdraw it. */
+        fun approvalKey(counter: Long, key: ByteArray?) =
+            build(MessageType.APPROVAL_KEY, counter) {
+                if (key != null) put("key", Base64.getEncoder().encodeToString(key))
+            }
+
+        fun unlockRequest(counter: Long) = build(MessageType.UNLOCK_REQUEST, counter)
+
+        /** Exactly one of [signature] and [error]. */
+        fun approvalResponse(counter: Long, requestId: Long, signature: ByteArray?, error: String?) =
+            build(MessageType.APPROVAL_RESPONSE, counter) {
+                put("requestId", requestId)
+                if (signature != null) {
+                    put("signature", Base64.getEncoder().encodeToString(signature))
+                } else {
+                    put("error", error ?: "declined on the phone")
+                }
+            }
+
+        /** Sent by the computer; here so the tests can build it. */
+        fun approvalRequest(
+            counter: Long,
+            requestId: Long,
+            purpose: String,
+            host: String,
+            user: String,
+            detail: String,
+            nonce: ByteArray,
+            issuedAt: Long,
+            codeRequired: Boolean,
+        ) = build(MessageType.APPROVAL_REQUEST, counter) {
+            put("requestId", requestId)
+            put("purpose", purpose)
+            put("host", host)
+            put("user", user)
+            put("detail", detail)
+            put("nonce", Base64.getEncoder().encodeToString(nonce))
+            put("issuedAt", issuedAt)
+            put("codeRequired", codeRequired)
+        }
+
+        /** Sent by the computer; here so the tests can build it. */
+        fun approvalResult(counter: Long, requestId: Long, ok: Boolean, error: String? = null) =
+            build(MessageType.APPROVAL_RESULT, counter) {
+                put("requestId", requestId)
+                put("ok", ok)
+                if (!error.isNullOrEmpty()) put("error", error)
+            }
+
+        /** Sent by the computer; here so the tests can build it. */
+        fun approvalCancel(counter: Long, requestId: Long, reason: String? = null) =
+            build(MessageType.APPROVAL_CANCEL, counter) {
+                put("requestId", requestId)
+                if (!reason.isNullOrEmpty()) put("reason", reason)
+            }
+
+        /** Sent by the computer; here so the tests can build it. */
+        fun lockPhone(counter: Long) = build(MessageType.LOCK_PHONE, counter)
+
+        fun lockPhoneResult(counter: Long, locked: Boolean, error: String? = null) =
+            build(MessageType.LOCK_PHONE_RESULT, counter) {
+                put("locked", locked)
+                if (!error.isNullOrEmpty()) put("error", error)
+            }
     }
 }
 

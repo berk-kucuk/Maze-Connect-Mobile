@@ -56,4 +56,21 @@ object Limits {
     /** Hard ceiling for an unpaired link, even while a code is on screen. */
     const val PAIRING_STAGE_MAX_MS = 300_000L
     const val PAIRING_ATTEMPTS_PER_MINUTE = 5
+
+    // ---- approval (docs/PROTOCOL.md § approval). Mirrors the desktop. ----
+
+    const val APPROVAL_NONCE_SIZE = 32
+    const val MAX_APPROVAL_HOST_CHARS = 64
+    const val MAX_APPROVAL_USER_CHARS = 64
+    const val MAX_APPROVAL_DETAIL_CHARS = 120
+    const val MAX_APPROVAL_SIGNATURE = 72
+    const val APPROVAL_CODE_DIGITS = 2
+    /** An approval this phone did not answer within this long is dropped. */
+    const val APPROVAL_TIMEOUT_MS = 45_000L
+    /** An unlock challenge is only taken this long after this phone asked. */
+    const val UNLOCK_ASK_WINDOW_MS = 30_000L
+    /** Challenges for administrator access one computer may raise a minute. */
+    const val MAX_APPROVAL_REQUESTS_PER_MINUTE = 6
+    /** Locks one computer may ask for in a minute. */
+    const val MAX_PHONE_LOCKS_PER_MINUTE = 3
 }

@@ -21,6 +21,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.mazeconnect.app.MainActivity
 import com.mazeconnect.app.R
+import com.mazeconnect.app.security.ApprovalActivity
+import com.mazeconnect.core.approval.ApprovalPurpose
 import com.mazeconnect.core.DeviceEvent
 import com.mazeconnect.core.DeviceManager
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +61,7 @@ class MazeConnectService : Service() {
         createChannel()
         createOpenOnPhoneChannel()
         createPairingChannel()
+        createApprovalChannel()
         acquireWifiLocks()
         watchNetwork()
     }
@@ -260,6 +263,17 @@ class MazeConnectService : Service() {
                     is DeviceEvent.PairingCompleted, is DeviceEvent.PairingFailed ->
                         getSystemService(NotificationManager::class.java)
                             .cancel(PAIRING_NOTIFICATION_ID)
+                    // An unlock is asked for from the app's own screen, which
+                    // is already showing it; administrator approval arrives on
+                    // its own and needs raising.
+                    is DeviceEvent.ApprovalRequested ->
+                        if (event.prompt.purpose != ApprovalPurpose.UNLOCK) {
+                            postApprovalNotification(event.prompt.computerName)
+                        }
+                    is DeviceEvent.ApprovalClosed ->
+                        getSystemService(NotificationManager::class.java)
+                            .cancel(APPROVAL_NOTIFICATION_ID)
+                    is DeviceEvent.PhoneLocked -> postLockedNotification(event.deviceName)
                     else -> {}
                 }
             }
@@ -406,6 +420,58 @@ class MazeConnectService : Service() {
             .notify(PAIRING_NOTIFICATION_ID, notification)
     }
 
+    /**
+     * A computer wants administrator approval. HIGH importance like pairing:
+     * someone is waiting at a terminal. The tap opens the approval screen —
+     * the decision, the code and the fingerprint all happen there, never in
+     * the shade.
+     */
+    private fun postApprovalNotification(computerName: String) {
+        val tap = PendingIntent.getActivity(
+            this,
+            2,
+            ApprovalActivity.intent(this),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(this, APPROVAL_CHANNEL_ID)
+            .setContentTitle(getString(R.string.approval_notification_title, computerName))
+            .setContentText(getString(R.string.approval_notification_text))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setContentIntent(tap)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setTimeoutAfter(com.mazeconnect.core.Limits.APPROVAL_TIMEOUT_MS)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(APPROVAL_NOTIFICATION_ID, notification)
+    }
+
+    /** Said after the fact, so the owner knows which computer did it. */
+    private fun postLockedNotification(computerName: String) {
+        val notification = NotificationCompat.Builder(this, OPEN_CHANNEL_ID)
+            .setContentTitle(getString(R.string.locked_notification_title, computerName))
+            .setContentText(getString(R.string.locked_notification_text))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(LOCKED_NOTIFICATION_ID, notification)
+    }
+
+    private fun createApprovalChannel() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channel = NotificationChannel(
+            APPROVAL_CHANNEL_ID,
+            getString(R.string.approval_channel_name),
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = getString(R.string.approval_channel_description)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
     private fun createPairingChannel() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
@@ -463,6 +529,9 @@ class MazeConnectService : Service() {
         private const val OPEN_NOTIFICATION_ID = 2
         private const val PAIRING_CHANNEL_ID = "maze-connect-pairing"
         private const val PAIRING_NOTIFICATION_ID = 3
+        private const val APPROVAL_CHANNEL_ID = "maze-connect-approval"
+        private const val APPROVAL_NOTIFICATION_ID = 4
+        private const val LOCKED_NOTIFICATION_ID = 5
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, MazeConnectService::class.java))

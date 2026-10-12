@@ -35,6 +35,7 @@ import android.content.Intent
 import androidx.core.net.toUri
 import androidx.compose.ui.platform.LocalContext
 import com.mazeconnect.app.service.LiveStatusNotification
+import com.mazeconnect.app.service.PhoneLock
 import com.mazeconnect.app.ui.components.MazeButton
 import com.mazeconnect.app.ui.components.MazeLabel
 import com.mazeconnect.app.update.UpdateStatus
@@ -64,6 +65,11 @@ fun SettingsScreen(
     onTestRing: () -> Unit = {},
     clipboardSync: Boolean = false,
     onSetClipboardSync: (Boolean) -> Unit = {},
+    approvalKeyCode: String? = null,
+    onSetUpApprovals: () -> Unit = {},
+    onRemoveApprovals: () -> Unit = {},
+    allowLock: Boolean = false,
+    onSetAllowLock: (Boolean) -> Unit = {},
 ) {
     val colors = LocalMazeColors.current
     val context = LocalContext.current
@@ -179,6 +185,76 @@ fun SettingsScreen(
             onClick = { onSetClipboardSync(!clipboardSync) },
             primary = false,
         )
+
+        Spacer(Modifier.height(22.dp))
+        Text(
+            text = "Let your computer lock this phone",
+            style = MaterialTheme.typography.titleMedium,
+            color = MazeColors.Paper,
+        )
+        Spacer(Modifier.height(6.dp))
+        // Android's own consent screen has the last word; re-read while this
+        // page is up so coming back from it shows the answer given there.
+        var lockActive by remember { mutableStateOf(PhoneLock.isActive(context)) }
+        LaunchedEffect(allowLock) {
+            while (true) {
+                lockActive = PhoneLock.isActive(context)
+                delay(PROMOTION_POLL_MS)
+            }
+        }
+        Text(
+            text = "For when you leave it on a desk: the computer can turn the screen off and " +
+                "lock it, and nothing else. Android asks you to agree once. Turning this off " +
+                "takes the permission back." +
+                if (allowLock && !lockActive) "\n\nWaiting for Android's permission." else "",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.dim,
+        )
+        Spacer(Modifier.height(12.dp))
+        MazeButton(
+            text = if (allowLock && lockActive) "On" else "Off",
+            onClick = {
+                val enable = !(allowLock && lockActive)
+                onSetAllowLock(enable)
+                if (enable && !PhoneLock.isActive(context)) {
+                    runCatching { context.startActivity(PhoneLock.activationIntent(context)) }
+                }
+            },
+            primary = false,
+        )
+
+        Spacer(Modifier.height(24.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
+        Spacer(Modifier.height(24.dp))
+
+        MazeLabel("Approvals")
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "Unlock your computer, and approve its sudo and administrator prompts, " +
+                "with your fingerprint. The key that signs stays in this phone's secure " +
+                "hardware and works only with your fingerprint (or PIN), once per approval. " +
+                "Adding a new fingerprint to the phone retires it.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.dim,
+        )
+        Spacer(Modifier.height(12.dp))
+        if (approvalKeyCode != null) {
+            Text(
+                text = "The computer must show this same code before you allow the phone there:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MazeColors.Paper,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = approvalKeyCode,
+                style = MaterialTheme.typography.titleLarge,
+                color = MazeColors.Paper,
+            )
+            Spacer(Modifier.height(12.dp))
+            MazeButton(text = "Remove", onClick = onRemoveApprovals, primary = false)
+        } else {
+            MazeButton(text = "Set up", onClick = onSetUpApprovals, primary = false)
+        }
 
         if (liveStatusSupported) {
             Spacer(Modifier.height(24.dp))

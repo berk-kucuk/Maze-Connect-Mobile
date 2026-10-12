@@ -213,6 +213,9 @@ private fun MazeConnectApp(
     val colors = LocalMazeColors.current
     var shareStatus by remember { mutableStateOf(state.shareStatusEnabled) }
     var allowRing by remember { mutableStateOf(state.allowRingEnabled) }
+    var allowLock by remember { mutableStateOf(state.allowLockEnabled) }
+    val approvalKeyCode by state.approvalKeyCode.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     fun openMore(page: MorePage?) {
         tab = TAB_MORE
@@ -284,6 +287,12 @@ private fun MazeConnectApp(
                         onRefresh = state::refreshSystemStatus,
                         onManualRefresh = state::refreshDashboard,
                         onOpenDevices = { openMore(MorePage.DEVICES) },
+                        canUnlock = state::canUnlock,
+                        onUnlock = { id ->
+                            context.startActivity(
+                                com.mazeconnect.app.security.ApprovalActivity.unlockIntent(context, id)
+                            )
+                        },
                     )
                     TAB_MEDIA -> MediaScreen(
                         devices = devices,
@@ -387,6 +396,12 @@ private fun MazeConnectApp(
                                         clipboardSync = it
                                     },
                                     commands = commands,
+                                    approvalKeyCode = approvalKeyCode,
+                                    allowLock = allowLock,
+                                    onSetAllowLock = {
+                                        state.allowLockEnabled = it
+                                        allowLock = it
+                                    },
                                 )
                             }
                         }
@@ -621,6 +636,9 @@ private fun MorePageContent(
     clipboardSync: Boolean,
     onSetClipboardSync: (Boolean) -> Unit,
     commands: com.mazeconnect.core.CommandsState?,
+    approvalKeyCode: String?,
+    allowLock: Boolean,
+    onSetAllowLock: (Boolean) -> Unit,
 ) {
     when (page) {
         MorePage.COMMANDS -> CommandsScreen(
@@ -675,6 +693,11 @@ private fun MorePageContent(
             onTestRing = state::testRing,
             clipboardSync = clipboardSync,
             onSetClipboardSync = onSetClipboardSync,
+            approvalKeyCode = approvalKeyCode,
+            onSetUpApprovals = state::setUpApprovals,
+            onRemoveApprovals = state::removeApprovals,
+            allowLock = allowLock,
+            onSetAllowLock = onSetAllowLock,
         )
     }
 }

@@ -1525,3 +1525,40 @@ lint 15 (hepsi eski). Cihazda görülmedi.
   Önbellek en fazla 150 önizleme. `PreviewImageTest`.
 
 Sürüm 0.16.1 / versionCode 49. Cihazda görülmedi.
+
+## 0.17.0 — onaylar (kilit açma, sudo/polkit), bilgisayardan kilitleme
+
+Masaüstü 1.5.0 ile birlikte; protokol ayrıntısı masaüstü PROTOCOL.md
+§ approval / lockPhone, bu taraftaki kurallar docs/PROTOCOL.md'de.
+
+- **Settings → Approvals → Set up**: `ApprovalKeys` ayrı bir Keystore anahtarı
+  üretir (StrongBox varsa orada; her imza için parmak izi/PIN, yeni parmak
+  izinde geçersiz, yalnız kilit açıkken). Kod (`XXXX-XXXX-XXXX-XXXX`)
+  bilgisayarın Ayarlar'ındakiyle aynı olmalı. *Remove* anahtarı siler ve
+  bilgisayarlara bildirir.
+- **Dashboard → Unlock** (yalnızca bilgisayar izin verdiyse ve anahtar
+  varsa): `ApprovalActivity` açılır, `unlockRequest` gider, challenge gelince
+  *Approve* → BiometricPrompt (`CryptoObject` ile) → imza.
+- **sudo/polkit**: yüksek öncelikli bildirim → `ApprovalActivity`; terminaldeki
+  iki haneli kod yazılmadan *Approve* açılmaz. Kod imzanın içinde; yanlış kod
+  bilgisayarda doğrulanmaz.
+- `ApprovalActivity`: export edilmez, overlay'leri gizler
+  (`HIDE_OVERLAY_WINDOWS`, API 31+), örtülü dokunuşları yok sayar, FLAG_SECURE.
+- **Let your computer lock this phone**: anahtar + Android'in cihaz yöneticisi
+  onayı (yalnızca `force-lock`, `res/xml/lock_admin.xml`). Kapatınca yetki
+  geri alınır. Kilitlenince "Locked by …" bildirimi.
+- Yeni izinler: `USE_BIOMETRIC`, `HIDE_OVERLAY_WINDOWS` (ikisi de normal,
+  kurulumda verilir). Play Protect'in yan yükleme engeline takılan
+  (NotificationListener, Accessibility) hiçbir şey yok.
+- minSdk 28: Android 9'da `BiometricManager` yok; orada yalnızca ekran kilidi
+  kontrol ediliyor, parmak izi yoksa anahtar oluşturma hatası gösteriliyor.
+  BiometricPrompt Android 9–10'da yalnız parmak izi + *Cancel*, 11+'da
+  parmak izi veya PIN.
+
+Doğrulama: `ApprovalSigningTest` (masaüstü ve PAM ile aynı vektör
+`ecb44638…`), tüm birim testleri, `:app:lintDebug` temiz. `:core:lintDebug`'daki
+iki `MissingPermission` hatası (`PhoneStatusCollector`) **önceden vardı**.
+**Cihazda görülmedi** — emülatör yok; BiometricPrompt ve cihaz yöneticisi ilk
+gerçek denemede bakılacak yerler.
+
+Sürüm 0.17.0 / versionCode 54.
